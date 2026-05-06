@@ -962,48 +962,53 @@ void wsAboutDialog::CheckButtonClick(wxCommandEvent& event)
     checkBtn->Enable(false);
     checkBtn->SetLabel(_("Checking ..."));
 
-    wxWebRequest request = wxWebSession::GetDefault().CreateRequest(this,
+    webReq = wxWebSession::GetDefault().CreateRequest(this,
         "https://github.com/JacobBruce/Wordsmith/raw/refs/heads/main/version.txt"
     );
 
-    if (!request.IsOk()) return;
+    if (!webReq.IsOk()) return;
 
-    Bind(wxEVT_WEBREQUEST_STATE, [this](wxWebRequestEvent& evt) {
-        switch (evt.GetState())
+    Bind(wxEVT_WEBREQUEST_STATE, OnStateChange, this);
+
+    webReq.Start();
+}
+
+void wsAboutDialog::OnStateChange(wxWebRequestEvent& event)
+{
+    switch (event.GetState())
+    {
+        case wxWebRequest::State_Completed:
         {
-            case wxWebRequest::State_Completed:
-            {
-                wxInputStream* stream(evt.GetResponse().GetStream());
-                wxString appVer;
+            wxString appVer(event.GetResponse().AsString());
 
-                while (!stream->Eof()) appVer << stream->GetC();
-
-                if (appVer.length() > 4 && appVer.length() < 16) {
-                    if (appVer == APP_VER) {
-                        wxMessageBox(_("Wordsmith is up to date."));
-                    } else {
-                        wxMessageDialog* updateDialog = new wxMessageDialog(this, wxEmptyString, _("Update Available"), wxYES_NO|wxICON_QUESTION);
-                        updateDialog->SetMessage(_("There is a new version of Wordsmith available. Do you want to visit the releases page?"));
-                        int answer = updateDialog->ShowModal();
-
-                        if (answer == wxID_CANCEL) return;
-                        if (answer == wxID_YES) wxLaunchDefaultBrowser("https://github.com/JacobBruce/Wordsmith/releases");
-                    }
+            if (appVer.length() > 4 && appVer.length() < 16) {
+                if (appVer == APP_VER) {
+                    wxMessageBox(_("Wordsmith is up to date."));
                 } else {
-                    checkBtn->SetLabel(_("Error Occurred"));
+                    wxMessageDialog* updateDialog = new wxMessageDialog(this, wxEmptyString, _("Update Available"), wxYES_NO|wxICON_QUESTION);
+                    updateDialog->SetMessage(_("There is a new version of Wordsmith available. Do you want to visit the releases page?"));
+                    int answer = updateDialog->ShowModal();
+
+                    if (answer == wxID_CANCEL) return;
+                    if (answer == wxID_YES) wxLaunchDefaultBrowser("https://github.com/JacobBruce/Wordsmith/releases");
                 }
-
-                break;
+            } else {
+                checkBtn->SetLabel(_("Error Occurred"));
             }
-            case wxWebRequest::State_Cancelled:
-            case wxWebRequest::State_Unauthorized:
-            case wxWebRequest::State_Failed:
-                //evt.GetErrorDescription()
-                checkBtn->SetLabel(_("Request Failed"));
-                break;
-        }
 
-    });
+            checkBtn->SetLabel(_("Check for Update"));
+            break;
+        }
+        case wxWebRequest::State_Active:
+        case wxWebRequest::State_Idle:
+            break;
+        case wxWebRequest::State_Cancelled:
+        case wxWebRequest::State_Unauthorized:
+        case wxWebRequest::State_Failed:
+            //event.GetErrorDescription()
+            checkBtn->SetLabel(_("Request Failed"));
+            break;
+    }
 }
 
 void wsAboutDialog::CloseButtonClick(wxCommandEvent& event)
@@ -1017,7 +1022,7 @@ void wsAboutDialog::ShowDialog()
     std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
     std::int64_t timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
 
-    if (timestamp - lastCheck > 30/*3600*/) {
+    if (timestamp - lastCheck > 1000) {
         checkBtn->Enable(true);
     } else {
         checkBtn->Enable(false);

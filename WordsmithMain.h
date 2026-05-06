@@ -257,10 +257,12 @@ public:
 
     void CheckButtonClick(wxCommandEvent& event);
     void CloseButtonClick(wxCommandEvent& event);
+    void OnStateChange(wxWebRequestEvent& event);
     void ShowDialog();
 
 private:
     uint64_t lastCheck = 0;
+    wxWebRequest webReq;
 
     wxStaticBitmap* appIcon;
     wsHtmlWindow* aboutHTML;
