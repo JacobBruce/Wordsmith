@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Wordsmith Text Editor
+GenericName=Wordsmith
+Comment=Text editor for writers and speed typists
+Exec=wordsmith
+Icon=wordsmith
+Terminal=false
+X-MultipleArgs=false
+Categories=Utility;Office;GTK;
+Keywords=text-editor;spell-check;dictionary;writing;markdown
+StartupNotify=true

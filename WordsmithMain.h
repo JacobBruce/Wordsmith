@@ -10,32 +10,13 @@
 #ifndef WORDSMITHMAIN_H
 #define WORDSMITHMAIN_H
 
-#define APP_VER "0.0.1"
+#define APP_VER "0.0.2"
 
 #pragma once
 #include <set>
 #include <mutex>
 #include <thread>
 #include <symspell/symspell.hpp>
-#include <wx/html/htmprint.h>
-#include <wx/html/htmlwin.h>
-#include <wx/hyperlink.h>
-#include <wx/webrequest.h>
-#include <wx/webview.h>
-#include <wx/utils.h>
-#include <wx/clipbrd.h>
-#include <wx/stdpaths.h>
-#include <wx/fdrepdlg.h>
-#include <wx/wfstream.h>
-#include <wx/fontdlg.h>
-#include <wx/fontdata.h>
-#include <wx/stattext.h>
-#include <wx/statline.h>
-#include <wx/statbmp.h>
-#include <wx/choice.h>
-#include <wx/fontpicker.h>
-#include <wx/clrpicker.h>
-#include <wx/stc/stc.h>
 #include "crc_32.h"
 #include "md5.h"
 #include "sha1.h"
@@ -57,12 +38,35 @@
 #include <wx/toolbar.h>
 //*)
 
+#include <wx/html/htmprint.h>
+#include <wx/html/htmlwin.h>
+#include <wx/hyperlink.h>
+#include <wx/webrequest.h>
+#include <wx/webview.h>
+#include <wx/utils.h>
+#include <wx/clipbrd.h>
+#include <wx/stdpaths.h>
+#include <wx/dirdlg.h>
+#include <wx/fdrepdlg.h>
+#include <wx/wfstream.h>
+#include <wx/fontdlg.h>
+#include <wx/fontdata.h>
+#include <wx/statbox.h>
+#include <wx/stattext.h>
+#include <wx/statline.h>
+#include <wx/statbmp.h>
+#include <wx/choice.h>
+#include <wx/fontpicker.h>
+#include <wx/clrpicker.h>
+#include <wx/stc/stc.h>
+#include <wx/settings.h>
+
 class wsHtmlWindow : public wxHtmlWindow
 {
 public:
     wsHtmlWindow(wxWindow* parent, wxWindowID id, const wxPoint& pos=wxDefaultPosition,
                  const wxSize& size=wxDefaultSize, long style=wxHW_SCROLLBAR_NEVER);
-    void OnLinkClicked(const wxHtmlLinkEvent& event);
+    void OnLinkClicked(const wxHtmlLinkInfo& info) override;
 };
 
 class HTMLFrame : public wxFrame
@@ -133,7 +137,7 @@ class wsSettingsDialog : public wxDialog {
 public:
     wsSettingsDialog(wxWindow* parent, const wxString& caption, const wxPoint& pos=wxDefaultPosition, const wxSize sz=wxDefaultSize);
 
-    void Reset();
+    void Reset(bool init=false);
     void ApplySettings(bool init=false);
     void FontButtonClick(wxCommandEvent& event);
     void SaveButtonClick(wxCommandEvent& event);
@@ -273,7 +277,7 @@ private:
 
 namespace GLOBALS {
 
-    inline wxString WordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'-‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ¯˘˙˚¸˝ˇ˛¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷ÿŸ⁄€‹›ﬁﬂ";
+    inline wxString WordChars = wxString::FromUTF8(WordParser::U32ToU8(U"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'-√†√°√¢√£√§√•√¶√ß√®√©√™√´√¨√≠√Æ√Ø√∞√±√≤√≥√¥√µ√∂√∏√π√∫√ª√º√Ω√ø√æ√Ä√Å√Ç√É√Ñ√Ö√Ü√á√à√â√ä√ã√å√ç√é√è√ê√ë√í√ì√î√ï√ñ√ò√ô√ö√õ√ú√ù√û√ü"));
     inline wxString LastPhrase = wxEmptyString;
     inline wxChar LastKeyPress = WXK_NONE;
     inline bool GotPhraseKeys = false;
@@ -289,7 +293,9 @@ namespace GLOBALS {
     inline phmap::parallel_flat_hash_map<std::string, std::pair<uint32_t,AfterLinks>> WordMap;
 	inline phmap::parallel_flat_hash_map<std::string, uint32_t> WebIndices;
     inline std::vector<std::pair<std::string, uint32_t>> WordVec;
+    inline std::vector<std::pair<wxString, std::u8string>> ArgFiles;
     inline std::unordered_map<std::string, std::string> Settings;
+    inline std::u8string UserDataDir;
     inline std::string LineEndStr = "\n";
     inline int LineEndMode = wxSTC_EOL_LF;
     inline int AutoCompMode = 0;
@@ -311,6 +317,7 @@ class WordsmithFrame: public wxFrame
 
         int findPos = 0;
         uint64_t charsTyped = 0;
+        bool searchMode = 0;
         yams::symspell::SymSpell spellChecker;
         wsSettingsDialog* settingsDialog;
         wsWordsDialog* wordsDialog;
@@ -338,6 +345,8 @@ class WordsmithFrame: public wxFrame
         void ShowPageDialog();
         void ShowOpenDialog();
         void ShowSaveDialog(bool force_show=false);
+        void ShowFindDialog();
+        void ShowReplaceDialog();
         void ShowSearchDialog(bool show_replace=false);
         void FindNext(const wxString& find_str, const int& flags);
         void SetStatusBarText(const wxString& txt);
@@ -500,7 +509,8 @@ class WordsmithFrame: public wxFrame
         wxAuiManager* AuiManager1;
         wxAuiNotebook* AuiNotebook1;
         wxColourDialog* ColourDialog1;
-        wxFileDialog* FileDialog1;
+        wxFileDialog* FileOpenDialog1;
+        wxFileDialog* FileSaveDialog1;
         wxMenu* EditMenu;
         wxMenu* HashMenuItem;
         wxMenu* InsertMenu;

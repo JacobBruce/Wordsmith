@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<wxsmith>
+	<object class="wxFrame" name="WordsmithFrame">
+		<title>Wordsmith Text Editor</title>
+		<icon>./icons/app_icon.png</icon>
+		<minsize>500,350</minsize>
+		<id_arg>0</id_arg>
+		<handler function="OnClose" entry="EVT_CLOSE" />
+		<object class="wxAuiManager" variable="AuiManager1" member="yes">
+			<object class="AuiManagerItem">
+				<object class="wxAuiNotebook" name="ID_AUINOTEBOOK1" variable="AuiNotebook1" member="yes">
+					<style>wxAUI_NB_DEFAULT_STYLE|wxBORDER_NONE</style>
+					<handler function="OnTabPageClose" entry="EVT_AUINOTEBOOK_PAGE_CLOSE" />
+					<handler function="OnTabPageClosed" entry="EVT_AUINOTEBOOK_PAGE_CLOSED" />
+					<handler function="OnTabPageChanged" entry="EVT_AUINOTEBOOK_PAGE_CHANGED" />
+				</object>
+				<name>PaneName1</name>
+				<captionvisible>0</captionvisible>
+				<minimizebutton>0</minimizebutton>
+				<maximizebutton>0</maximizebutton>
+				<pinbutton>0</pinbutton>
+				<closebutton>0</closebutton>
+				<dockdirection>Center</dockdirection>
+				<dockfixed>0</dockfixed>
+				<dockabledirection></dockabledirection>
+				<floatable>0</floatable>
+				<paneborder>0</paneborder>
+				<destroyonclose>0</destroyonclose>
+				<firstadd>0</firstadd>
+			</object>
+		</object>
+		<object class="wxMenuBar" variable="MenuBar1" member="no">
+			<object class="wxMenu" variable="FileMenu" member="no">
+				<label>&amp;File</label>
+				<object class="wxMenuItem" name="ID_MENUITEM2" variable="NewMenuItem" member="yes">
+					<label>New</label>
+					<accel>Ctrl-N</accel>
+					<help>Create new file</help>
+					<handler function="OnNewFileClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM3" variable="OpenMenuItem" member="yes">
+					<label>Open</label>
+					<accel>Ctrl-O</accel>
+					<help>Open file</help>
+					<handler function="OnOpenFileClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM4" variable="SaveMenuItem" member="yes">
+					<label>Save</label>
+					<accel>Ctrl-S</accel>
+					<help>Save file</help>
+					<handler function="OnSaveClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM5" variable="SaveAsMenuItem" member="yes">
+					<label>Save As</label>
+					<accel>Ctrl-Shift-S</accel>
+					<help>Save file with new name</help>
+					<handler function="OnSaveAsClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM30" variable="PageMenuItem" member="yes">
+					<label>Page Setup</label>
+					<help>Printer page setup</help>
+					<handler function="OnPageClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM25" variable="PreviewMenuItem" member="yes">
+					<label>Preview</label>
+					<help>Print preview</help>
+					<handler function="OnPreviewClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM26" variable="PrintMenuItem" member="yes">
+					<label>Print</label>
+					<accel>Ctrl-P</accel>
+					<help>Print document</help>
+					<handler function="OnPrintClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM1" variable="QuitMenuItem" member="no">
+					<label>Quit</label>
+					<accel>Alt-F4</accel>
+					<help>Quit the application</help>
+					<handler function="OnQuit" entry="EVT_MENU" />
+				</object>
+			</object>
+			<object class="wxMenu" variable="EditMenu" member="yes">
+				<label>&amp;Edit</label>
+				<object class="wxMenuItem" name="ID_MENUITEM6" variable="UndoMenuItem" member="yes">
+					<label>Undo</label>
+					<accel>Ctrl-Z</accel>
+					<help>Undo action</help>
+					<handler function="OnUndoClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM7" variable="RedoMenuItem" member="yes">
+					<label>Redo</label>
+					<accel>Ctrl-Y</accel>
+					<help>Redo action</help>
+					<handler function="OnRedoClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM8" variable="CutMenuItem" member="yes">
+					<label>Cut</label>
+					<accel>Ctrl-X</accel>
+					<help>Cut text</help>
+					<handler function="OnCutClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM9" variable="CopyMenuItem" member="yes">
+					<label>Copy</label>
+					<accel>Ctrl-C</accel>
+					<help>Copy text</help>
+					<handler function="OnCopyClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM10" variable="PasteMenuItem" member="yes">
+					<label>Paste</label>
+					<accel>Ctrl-V</accel>
+					<help>Paste text</help>
+					<handler function="OnPasteClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM11" variable="FindMenuItem" member="yes">
+					<label>Find</label>
+					<accel>Ctrl-F</accel>
+					<help>Find text</help>
+					<handler function="OnFindClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM39" variable="NextMenuItem" member="yes">
+					<label>Find Next</label>
+					<accel>F3</accel>
+					<help>Find next match</help>
+					<handler function="OnFindNextClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM12" variable="ReplaceMenuItem" member="yes">
+					<label>Replace</label>
+					<accel>Ctrl-R</accel>
+					<help>Replace text</help>
+					<handler function="OnReplaceClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM13" variable="SelectMenuItem" member="yes">
+					<label>Select All</label>
+					<accel>Ctrl-A</accel>
+					<help>Select all text</help>
+					<handler function="OnSelectAllClick" entry="EVT_MENU" />
+				</object>
+			</object>
+			<object class="wxMenu" variable="ViewMenu" member="yes">
+				<label>&amp;View</label>
+				<object class="wxMenu" name="ID_MENUITEM46" variable="ZoomMenuItem" member="yes">
+					<label>Zoom</label>
+					<help>Change zoom level</help>
+					<object class="wxMenuItem" name="ID_MENUITEM47" variable="MenuItem49" member="yes">
+						<label>Zoom In</label>
+						<accel>Ctrl-+</accel>
+						<handler function="OnZoomInClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM48" variable="MenuItem50" member="yes">
+						<label>Zoom Out</label>
+						<accel>Ctrl--</accel>
+						<handler function="OnZoomOutClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM49" variable="MenuItem51" member="yes">
+						<label>Reset</label>
+						<accel>Ctrl-0</accel>
+						<handler function="OnZoomResetClick" entry="EVT_MENU" />
+					</object>
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM14" variable="ToolBarMenuItem" member="yes">
+					<label>Tool Bar</label>
+					<help>Toggle tool bar</help>
+					<handler function="OnToggleToolBar" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM15" variable="StatusBarMenuItem" member="yes">
+					<label>Status Bar</label>
+					<help>Toggle status bar</help>
+					<handler function="OnToggleStatusBar" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM28" variable="WebViewMenuItem" member="yes">
+					<label>Web Viewer</label>
+					<accel>F9</accel>
+					<help>Preview Markdown and HTML documents</help>
+					<handler function="OnDocViewClick" entry="EVT_MENU" />
+				</object>
+			</object>
+			<object class="wxMenu" variable="InsertMenu" member="yes">
+				<label>&amp;Insert</label>
+				<object class="wxMenu" name="ID_MENUITEM16" variable="MarkdownMenuItem" member="yes">
+					<label>Markdown</label>
+					<object class="wxMenuItem" name="ID_MENUITEM31" variable="MenuItem33" member="yes">
+						<label>Title</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM32" variable="MenuItem34" member="yes">
+						<label>Link</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM33" variable="MenuItem35" member="yes">
+						<label>Image</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM34" variable="MenuItem36" member="yes">
+						<label>Quote</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM35" variable="MenuItem37" member="yes">
+						<label>Code</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM36" variable="MenuItem38" member="yes">
+						<label>List</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM38" variable="MenuItem40" member="yes">
+						<label>Rule</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM37" variable="MenuItem39" member="yes">
+						<label>Styled Text</label>
+						<handler function="OnAddMarkdownClick" entry="EVT_MENU" />
+					</object>
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM50" variable="DateTimeMenuItem" member="yes">
+					<label>Date Time</label>
+					<accel>F5</accel>
+					<help>Insert current time and date</help>
+					<handler function="OnDateTimeClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM29" variable="TimestampMenuItem" member="yes">
+					<label>Timestamp</label>
+					<accel>F6</accel>
+					<help>Insert unix timestamp</help>
+					<handler function="OnTimestampClick" entry="EVT_MENU" />
+				</object>
+			</object>
+			<object class="wxMenu" variable="ToolsMenu" member="yes">
+				<label>&amp;Tools</label>
+				<object class="wxMenuItem" name="ID_MENUITEM17" variable="TextStatsMenuItem" member="yes">
+					<label>Text Stats</label>
+					<help>Show text stats</help>
+					<handler function="OnTextStatsClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM18" variable="SessionMenuItem" member="yes">
+					<label>Session Stats</label>
+					<help>Show session stats</help>
+					<handler function="OnSessionStatsClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM22" variable="DictionaryMenuItem" member="yes">
+					<label>Dictionary</label>
+					<help>Show dictionary</help>
+					<handler function="OnDictionaryClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM23" variable="WordsMenuItem" member="yes">
+					<label>Word Manager</label>
+					<help>Add or remove words</help>
+					<handler function="OnWordManagerClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM52" variable="MenuItem1" member="yes">
+					<label>Phrase Manager</label>
+					<help>Add or remove phrases</help>
+					<handler function="OnPhraseManagerClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenu" name="ID_MENUITEM40" variable="HashMenuItem" member="yes">
+					<label>Hash</label>
+					<help>Calculate document hash</help>
+					<object class="wxMenuItem" name="ID_MENUITEM41" variable="MenuItem43" member="yes">
+						<label>MD5</label>
+						<handler function="OnHashClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM27" variable="CryptoMenuItem" member="yes">
+						<label>CRC-32</label>
+						<handler function="OnHashClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM42" variable="MenuItem44" member="yes">
+						<label>SHA-1</label>
+						<handler function="OnHashClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM43" variable="MenuItem45" member="yes">
+						<label>SHA2-256</label>
+						<handler function="OnHashClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM44" variable="MenuItem46" member="yes">
+						<label>SHA2-512</label>
+						<handler function="OnHashClick" entry="EVT_MENU" />
+					</object>
+				</object>
+			</object>
+			<object class="wxMenu" variable="SettingsMenu" member="yes">
+				<label>&amp;Settings</label>
+				<object class="wxMenuItem" name="ID_MENUITEM19" variable="FontStyleMenuItem" member="yes">
+					<label>Font Style</label>
+					<help>Show font settings</help>
+					<handler function="OnFontClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM45" variable="FontColorMenuItem" member="yes">
+					<label>Font Color</label>
+					<help>Pick font color</help>
+					<handler function="OnFontColorClick" entry="EVT_MENU" />
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM20" variable="WordWrapMenuItem" member="yes">
+					<label>Word Wrap</label>
+					<help>Toggle word wrap</help>
+					<checked>1</checked>
+					<handler function="OnToggleWordWrap" entry="EVT_MENU" />
+					<checkable>1</checkable>
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM51" variable="SpellCheckMenuItem" member="yes">
+					<label>Spell Check</label>
+					<help>Toggle spell check</help>
+					<checked>1</checked>
+					<handler function="OnToggleSpellCheck" entry="EVT_MENU" />
+					<checkable>1</checkable>
+				</object>
+				<object class="separator" />
+				<object class="wxMenuItem" name="ID_MENUITEM21" variable="PreferencesMenuItem" member="yes">
+					<label>Preferences</label>
+					<help>Edit preferences</help>
+					<handler function="OnPreferencesClick" entry="EVT_MENU" />
+				</object>
+			</object>
+			<object class="wxMenu" variable="HelpMenu" member="no">
+				<label>&amp;Help</label>
+				<object class="wxMenuItem" name="idMenuAbout" variable="AboutMenuItem" member="no">
+					<label>About</label>
+					<accel>F1</accel>
+					<help>Show info about this application</help>
+					<handler function="OnAboutClick" entry="EVT_MENU" />
+				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM24" variable="TipsMenuItem" member="yes">
+					<label>Tips</label>
+					<accel>F12</accel>
+					<help>Show helpful tips</help>
+					<handler function="OnTipsClick" entry="EVT_MENU" />
+				</object>
+			</object>
+		</object>
+		<object class="wxStatusBar" name="ID_STATUSBAR1" variable="StatusBar1" member="yes">
+			<fields>4</fields>
+			<widths>-15,-5,-5,-5</widths>
+			<styles>wxSB_NORMAL,wxSB_NORMAL,wxSB_NORMAL,wxSB_NORMAL</styles>
+			<style>wxBORDER_NONE</style>
+		</object>
+		<object class="wxToolBar" name="ID_TOOLBAR1" variable="ToolBar1" member="yes">
+			<object class="tool" name="new_btn" variable="NewToolBarBtn" member="yes">
+				<label>New</label>
+				<bitmap>./icons/new_file_x32.png</bitmap>
+				<tooltip>New file</tooltip>
+				<longhelp>Create new file</longhelp>
+				<handler function="OnNewFileClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="open_btn" variable="OpenToolBarBtn" member="yes">
+				<label>Open</label>
+				<bitmap>./icons/open_file_x32.png</bitmap>
+				<tooltip>Open file</tooltip>
+				<longhelp>Open file</longhelp>
+				<handler function="OnOpenFileClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="save_btn" variable="SaveToolBarBtn" member="yes">
+				<label>Save</label>
+				<bitmap>./icons/save_file_x32.png</bitmap>
+				<tooltip>Save file</tooltip>
+				<longhelp>Save file</longhelp>
+				<handler function="OnSaveClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="saveas_btn" variable="SaveAsToolBarBtn" member="yes">
+				<label>Save As</label>
+				<bitmap>./icons/saveas_file_x32.png</bitmap>
+				<tooltip>Save file as</tooltip>
+				<longhelp>Save file with new name</longhelp>
+				<handler function="OnSaveAsClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="undo_btn" variable="UndoToolBarBtn" member="yes">
+				<label>Undo</label>
+				<bitmap>./icons/undo_x32.png</bitmap>
+				<tooltip>Undo action</tooltip>
+				<longhelp>Undo last action</longhelp>
+				<handler function="OnUndoClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="redo_btn" variable="RedoToolBarBtn" member="yes">
+				<label>Redo</label>
+				<bitmap>./icons/redo_x32.png</bitmap>
+				<tooltip>Redo action</tooltip>
+				<longhelp>Redo last action</longhelp>
+				<handler function="OnRedoClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="cut_btn" variable="CutToolBarBtn" member="yes">
+				<label>Cut</label>
+				<bitmap>./icons/cut_x32.png</bitmap>
+				<tooltip>Cut text</tooltip>
+				<longhelp>Cut text</longhelp>
+				<handler function="OnCutClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="copy_btn" variable="CopyToolBarBtn" member="yes">
+				<label>Copy</label>
+				<bitmap>./icons/copy_x32.png</bitmap>
+				<tooltip>Copy text</tooltip>
+				<longhelp>Copy text</longhelp>
+				<handler function="OnCopyClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="paste_btn" variable="PasteToolBarBtn" member="yes">
+				<label>Paste</label>
+				<bitmap>./icons/paste_x32.png</bitmap>
+				<tooltip>Paste text</tooltip>
+				<longhelp>Paste text</longhelp>
+				<handler function="OnPasteClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="find_btn" variable="FindToolBarBtn" member="yes">
+				<label>Find</label>
+				<bitmap>./icons/search_x32.png</bitmap>
+				<tooltip>Find text</tooltip>
+				<longhelp>Find text</longhelp>
+				<handler function="OnFindClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="dict_btn" variable="DictToolBarBtn" member="yes">
+				<label>Dict</label>
+				<bitmap>./icons/book_x32.png</bitmap>
+				<tooltip>Show dictionary</tooltip>
+				<longhelp>Show dictionary</longhelp>
+				<handler function="OnDictionaryClick" entry="EVT_TOOL" />
+			</object>
+			<object class="tool" name="tips_btn" variable="TipsToolBarBtn" member="yes">
+				<label>Tips</label>
+				<bitmap>./icons/tips_x32.png</bitmap>
+				<tooltip>Show tips</tooltip>
+				<longhelp>Show helpful tips</longhelp>
+				<handler function="OnTipsClick" entry="EVT_TOOL" />
+			</object>
+		</object>
+		<object class="wxFileDialog" variable="FileOpenDialog1" member="yes">
+			<message>Open file</message>
+			<style>wxFD_OPEN|wxFD_FILE_MUST_EXIST</style>
+		</object>
+		<object class="wxFileDialog" variable="FileSaveDialog1" member="yes">
+			<message>Save file</message>
+			<style>wxFD_SAVE|wxFD_OVERWRITE_PROMPT</style>
+		</object>
+		<object class="wxMessageDialog" name="ID_MESSAGEDIALOG1" variable="ErrorDialog1" member="yes">
+			<caption>Error</caption>
+			<message></message>
+			<style>wxOK|wxICON_ERROR</style>
+		</object>
+		<object class="wxSingleChoiceDialog" variable="SingleChoiceDialog1" member="yes">
+			<message>Document Type</message>
+			<caption>Choose</caption>
+			<content>
+				<item>Text</item>
+				<item>HTML</item>
+				<item>Markdown</item>
+			</content>
+		</object>
+		<object class="wxMessageDialog" name="ID_MESSAGEDIALOG2" variable="MessageDialog1" member="yes">
+			<caption>Message</caption>
+			<message></message>
+			<style>wxOK|wxICON_INFORMATION</style>
+		</object>
+		<object class="wxMessageDialog" name="ID_MESSAGEDIALOG3" variable="QuestionDialog1" member="yes">
+			<caption>Question</caption>
+			<message></message>
+			<style>wxYES_NO|wxICON_QUESTION</style>
+		</object>
+		<object class="wxColourDialog" variable="ColourDialog1" member="yes" />
+		<object class="wxTextEntryDialog" name="ID_TEXTENTRYDIALOG1" variable="TextEntryDialog1" member="yes">
+			<caption></caption>
+			<message>test</message>
+		</object>
+		<object class="wxStopWatch" variable="SessionWatch" member="yes" />
+	</object>
+</wxsmith>

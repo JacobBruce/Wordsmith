@@ -35,8 +35,6 @@ namespace WordParser {
     static uint8_t capChars[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     static uint8_t capCharsE[32] = "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖ÷ØÙÚÛÜİŞ";
 
-    inline std::wstring_convert<std::codecvt_utf8<char32_t>,char32_t> cv_u8_u32;
-
     inline bool IsUTF8orASCII(const std::string& file_str)
     {
         uint8_t* chars = (uint8_t*)file_str.c_str();
@@ -47,15 +45,70 @@ namespace WordParser {
         return true;
     }
 
-    inline std::string U32ToU8(const std::u32string& str)
-    {
-        return cv_u8_u32.to_bytes(str);
-    }
+	inline std::string U32ToU8(std::u32string_view u32str)
+	{
+		std::string u8str;
+		u8str.reserve(u32str.length());
 
-    inline std::u32string U8ToU32(const std::string& str)
-    {
-        return cv_u8_u32.from_bytes(str);
-    }
+		for (const char32_t& c : u32str)
+		{
+			if (c <= 0x7F) {
+				u8str.push_back(static_cast<char>(c));
+			} else if (c <= 0x7FF) {
+				u8str.push_back(static_cast<char>(0xC0 | (c >> 6)));
+				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+			} else if (c <= 0xFFFF) {
+				u8str.push_back(static_cast<char>(0xE0 | (c >> 12)));
+				u8str.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+			} else if (c <= 0x10FFFF) {
+				u8str.push_back(static_cast<char>(0xF0 | (c >> 18)));
+		        u8str.push_back(static_cast<char>(0x80 | ((c >> 12) & 0x3F)));
+				u8str.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+			}
+		}
+
+		return u8str;
+	}
+
+	inline std::u32string U8ToU32(std::string_view u8str)
+	{
+		std::u32string u32str;
+
+		for (size_t i=0; i < u8str.length();)
+		{
+			uint32_t cp = 0;
+			const uint8_t& c = u8str[i];
+
+			if (c <= 0x7F) {
+				cp = c;
+				i++;
+			} else if ((c & 0xE0) == 0xC0) {
+				cp = (c & 0x1F) << 6;
+				cp |= (u8str[i + 1] & 0x3F);
+				i += 2;
+			} else if ((c & 0xF0) == 0xE0) {
+				cp = (c & 0x0F) << 12;
+				cp |= (u8str[i + 1] & 0x3F) << 6;
+				cp |= (u8str[i + 2] & 0x3F);
+				i += 3;
+			} else if ((c & 0xF8) == 0xF0) {
+				cp = (c & 0x07) << 18;
+				cp |= (u8str[i + 1] & 0x3F) << 12;
+				cp |= (u8str[i + 2] & 0x3F) << 6;
+				cp |= (u8str[i + 3] & 0x3F);
+				i += 4;
+			} else { // Invalid UTF-8 start byte
+				i++;
+				continue;
+			}
+
+			u32str += static_cast<char32_t>(cp);
+		}
+
+		return u32str;
+	}
 
     inline uint32_t UTF8CharLen(const uint32_t& c)
     {
@@ -152,15 +205,13 @@ namespace WordParser {
         return c;
     }
 
-    inline wxString& UpperWord(wxString& word)
+    inline void UpperWord(wxString& word)
     {
         if (word.length() > 1)
             word[0] = UpperChar(word[0]);
-
-        return word;
     }
 
-    inline wxString& LowerWord(wxString& word)
+    inline void LowerWord(wxString& word)
     {
         if (word.length() > 1 && IsCap2(word[0])) {
 
@@ -169,27 +220,35 @@ namespace WordParser {
 
             for (size_t i=1; i < word.size(); ++i) {
                 lowStr[i] = LowerChar(word[i]);
-                if (word[i] != lowStr[i]) return word;
+                if (word[i] != lowStr[i]) return;
             }
 
             word = lowStr;
         }
-
-        return word;
     }
 
-    inline std::string& UpperWord(std::string& word)
+    inline wxString UpperWord(const wxString& word)
     {
-        wxString wxsWord(wxString::FromUTF8(word));
-        word = UpperWord(wxsWord).utf8_string();
-        return word;
+        wxString uppStr(word);
+        UpperWord(uppStr);
+        return uppStr;
     }
 
-    inline std::string& LowerWord(std::string& word)
+    inline wxString LowerWord(const wxString& word)
     {
-        wxString wxsWord(wxString::FromUTF8(word));
-        word = LowerWord(wxsWord).utf8_string();
-        return word;
+        wxString lowStr(word);
+        LowerWord(lowStr);
+        return lowStr;
+    }
+
+    inline std::string UpperWordU8(const wxString& word)
+    {
+        return UpperWord(word).utf8_string();
+    }
+
+    inline std::string LowerWordU8(const wxString& word)
+    {
+        return LowerWord(word).utf8_string();
     }
 
     inline std::pair<size_t,float> CountWords(const wxString& text)

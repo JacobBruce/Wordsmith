@@ -8,7 +8,6 @@
  **************************************************************/
 
 #include "WordsmithMain.h"
-#include <wx/msgdlg.h>
 
 //(*InternalHeaders(WordsmithFrame)
 #include <wx/bitmap.h>
@@ -25,13 +24,16 @@ enum wxbuildinfoformat {
 wxString wxbuildinfo(wxbuildinfoformat format)
 {
     wxString wxbuild(wxVERSION_STRING);
+    wxString wsbuild(APP_VER);
 
-    if (format == long_f )
+    if (format == long_f)
     {
 #if defined(__WXMSW__)
         wxbuild << _T("-Windows");
+        wsbuild = "Windows Release Build v" + wsbuild;
 #elif defined(__UNIX__)
         wxbuild << _T("-Linux");
+        wsbuild = "Linux Release Build v" + wsbuild;
 #endif
 
 #if wxUSE_UNICODE
@@ -41,7 +43,13 @@ wxString wxbuildinfo(wxbuildinfoformat format)
 #endif // wxUSE_UNICODE
     }
 
-    return wxbuild;
+    return wsbuild + "<br>" + wxbuild;
+}
+
+bool IsMouseInWindow(wxWindow* win) {
+    if (!win->HasFocus()) return false;
+    wxPoint mousePos = wxGetMousePosition();
+    return win->GetScreenRect().Contains(mousePos);
 }
 
 //(*IdInit(WordsmithFrame)
@@ -286,16 +294,16 @@ wsSettingsDialog::wsSettingsDialog(wxWindow* parent, const wxString& caption, co
     colorPicker->SetMinSize(wxSize(30,colorPicker->GetBestHeight(30)));
 
     fontBtn = new wxButton(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
-    fontBtn->SetMinSize(wxSize(125,fontBtn->GetBestHeight(125)));
-    fontBtn->Bind(wxEVT_BUTTON, &FontButtonClick, this);
+    fontBtn->SetMinSize(wxSize(125,colorPicker->GetMinHeight()));
+    fontBtn->Bind(wxEVT_BUTTON, &wsSettingsDialog::FontButtonClick, this);
 
     applyBtn = new wxButton(this, wxID_ANY, _("Apply"));
     applyBtn->SetMinSize(wxSize(75,applyBtn->GetBestHeight(75)));
-    applyBtn->Bind(wxEVT_BUTTON, &SaveButtonClick, this);
+    applyBtn->Bind(wxEVT_BUTTON, &wsSettingsDialog::SaveButtonClick, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(75,closeBtn->GetBestHeight(75)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
+    closeBtn->Bind(wxEVT_BUTTON, &wsSettingsDialog::CloseButtonClick, this);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(label1, 0, wxALIGN_LEFT | wxALL, 5);
@@ -322,29 +330,27 @@ wsSettingsDialog::wsSettingsDialog(wxWindow* parent, const wxString& caption, co
 
     SetSizerAndFit(sizer);
 
-    Reset();
-
+    Reset(true);
     ApplySettings(true);
 }
 
-void wsSettingsDialog::Reset()
+void wsSettingsDialog::Reset(bool init)
 {
     themeChoice->SetSelection(stoi(GLOBALS::Settings["THEME"]));
     eolChoice->SetSelection(stoi(GLOBALS::Settings["EOL"]));
     acChoice->SetSelection(stoi(GLOBALS::Settings["AC"]));
 
+    defaultFont = fontBtn->GetFont();
+
     if (GLOBALS::Settings["FONT"] != "default") {
         auto fontData(ExplodeStr(GLOBALS::Settings["FONT"], "|"));
         if (fontData.size() == 4) {
             defaultFont.SetFaceName(fontData[0]);
-            defaultFont.SetPointSize(8);
             defaultFont.SetWeight(wxFontWeight(stoi(fontData[2])));
             defaultFont.SetStyle(wxFontStyle(stoi(fontData[3])));
-            fontBtn->SetFont(defaultFont);
+            if (!init) fontBtn->SetFont(defaultFont);
             defaultFont.SetPointSize(stoi(fontData[1]));
         }
-    } else {
-        defaultFont = fontBtn->GetFont();
     }
 
     fontBtn->SetLabel(fontBtn->GetFont().GetFaceName());
@@ -413,7 +419,7 @@ void wsSettingsDialog::ApplySettings(bool init)
         }
     }
 
-    if (!init) SaveConfigFile(u8"./files/settings.cfg", GLOBALS::Settings);
+    if (!init) SaveConfigFile(GLOBALS::UserDataDir + u8"./settings.cfg", GLOBALS::Settings);
 }
 
 void wsSettingsDialog::FontButtonClick(wxCommandEvent& event)
@@ -424,12 +430,11 @@ void wsSettingsDialog::FontButtonClick(wxCommandEvent& event)
     fontData.SetInitialFont(defaultFont);
 
     wxFontDialog fontDialog(this, fontData);
-
     if (fontDialog.ShowModal() == wxID_CANCEL) return;
 
     wxFont newFont(fontDialog.GetFontData().GetChosenFont());
     defaultFont = newFont;
-    newFont.SetPointSize(8);
+    newFont.SetPointSize(fontBtn->GetFont().GetPointSize());
 
     fontBtn->SetFont(newFont);
     fontBtn->SetLabel(newFont.GetFaceName());
@@ -455,11 +460,11 @@ wsWordsDialog::wsWordsDialog(wxWindow* parent, const wxString& caption, const wx
 
     applyBtn = new wxButton(this, wxID_ANY, _("Apply"));
     applyBtn->SetMinSize(wxSize(80,applyBtn->GetBestHeight(80)));
-    applyBtn->Bind(wxEVT_BUTTON, &SaveButtonClick, this);
+    applyBtn->Bind(wxEVT_BUTTON, &wsWordsDialog::SaveButtonClick, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(80,closeBtn->GetBestHeight(80)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
+    closeBtn->Bind(wxEVT_BUTTON, &wsWordsDialog::CloseButtonClick, this);
 
     newWords = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
     newWords->SetMinSize(wxSize(220,300));
@@ -493,7 +498,7 @@ wsWordsDialog::wsWordsDialog(wxWindow* parent, const wxString& caption, const wx
 
     SetSizerAndFit(sizer);
 
-    LoadWords(u8"./files/custom_words.txt");
+    LoadWords(GLOBALS::UserDataDir + u8"/custom_words.txt");
 }
 
 void wsWordsDialog::Reset()
@@ -530,7 +535,7 @@ void wsWordsDialog::SaveWords()
     for (const std::string& word : GLOBALS::SkipWords)
         wordsStr += word + "\n";
 
-    WriteFileStr(u8"./files/custom_words.txt", wordsStr);
+    WriteFileStr(GLOBALS::UserDataDir + u8"/custom_words.txt", wordsStr);
 
     static_cast<WordsmithFrame*>(GetParent())->spellTimer.Start(1, true);
 }
@@ -544,16 +549,20 @@ void wsWordsDialog::SaveButtonClick(wxCommandEvent& event)
     {
         wxString word(newWords->GetLineText(i).Trim());
 
-        if (!word.empty())
-            GLOBALS::UserWords.emplace(WordParser::LowerWord(word).utf8_string());
+        if (!word.empty()) {
+            WordParser::LowerWord(word);
+            GLOBALS::UserWords.emplace(word.utf8_string());
+        }
     }
 
     for (int i=0; i < badWords->GetNumberOfLines(); ++i)
     {
         wxString word(badWords->GetLineText(i).Trim());
 
-        if (!word.empty())
-            GLOBALS::SkipWords.emplace(WordParser::LowerWord(word).utf8_string());
+        if (!word.empty()) {
+            WordParser::LowerWord(word);
+            GLOBALS::SkipWords.emplace(word.utf8_string());
+        }
     }
 
     SaveWords();
@@ -615,11 +624,11 @@ wsPhrasesDialog::wsPhrasesDialog(wxWindow* parent, const wxString& caption, cons
 
     applyBtn = new wxButton(this, wxID_ANY, _("Apply"));
     applyBtn->SetMinSize(wxSize(80,applyBtn->GetBestHeight(80)));
-    applyBtn->Bind(wxEVT_BUTTON, &SaveButtonClick, this);
+    applyBtn->Bind(wxEVT_BUTTON, &wsPhrasesDialog::SaveButtonClick, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(80,closeBtn->GetBestHeight(80)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
+    closeBtn->Bind(wxEVT_BUTTON, &wsPhrasesDialog::CloseButtonClick, this);
 
     phrases = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_DONTWRAP);
     phrases->SetMinSize(wxSize(400,400));
@@ -646,7 +655,7 @@ wsPhrasesDialog::wsPhrasesDialog(wxWindow* parent, const wxString& caption, cons
 
     SetSizerAndFit(sizer);
 
-    LoadPhrases(u8"./files/custom_phrases.txt");
+    LoadPhrases(GLOBALS::UserDataDir + u8"/custom_phrases.txt");
 }
 
 void wsPhrasesDialog::Reset()
@@ -675,7 +684,7 @@ void wsPhrasesDialog::SavePhrases()
     for (const std::string& phrase : GLOBALS::UserPhrases)
         phraseStr += phrase + "\n";
 
-    WriteFileStr(u8"./files/custom_phrases.txt", phraseStr);
+    WriteFileStr(GLOBALS::UserDataDir + u8"/custom_phrases.txt", phraseStr);
 }
 
 void wsPhrasesDialog::SaveButtonClick(wxCommandEvent& event)
@@ -722,31 +731,31 @@ void wsPhrasesDialog::AddPhrase(const std::string& phrase)
 wsDictDialog::wsDictDialog(wxWindow* parent, const wxString& caption, const wxPoint& pos, const wxSize sz) :
     wxDialog(parent, wxID_ANY, caption, pos, sz, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
 {
-    defText = new wxTextCtrl(this, wxID_ANY, _("Loading word files ..."), wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxBORDER_NONE);
+    wxStaticBoxSizer* sizer1 = new wxStaticBoxSizer(wxVERTICAL, this, _("DEFINITIONS"));
+    wxStaticBoxSizer* sizer2 = new wxStaticBoxSizer(wxVERTICAL, this, _("EXAMPLES"));
+
+    defText = new wxTextCtrl(sizer1->GetStaticBox(), wxID_ANY, _("Loading word files ..."), wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxBORDER_NONE);
     defText->SetMargins(4,3);
     defText->SetMinSize(wxSize(350,150));
     defText->SetBackgroundColour(GetBackgroundColour());
 
-    exText = new wxTextCtrl(this, wxID_ANY, _(""), wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxBORDER_NONE);
+    exText = new wxTextCtrl(sizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxBORDER_NONE);
     exText->SetMargins(4,3);
     exText->SetMinSize(wxSize(350,150));
     exText->SetBackgroundColour(GetBackgroundColour());
 
-    wxStaticBoxSizer* sizer1 = new wxStaticBoxSizer(wxVERTICAL, this, _("DEFINITIONS"));
-    sizer1->Add(defText, 1,  wxEXPAND);
-
-    wxStaticBoxSizer* sizer2 = new wxStaticBoxSizer(wxVERTICAL, this, _("EXAMPLES"));
-    sizer2->Add(exText, 1,  wxEXPAND);
+    sizer1->Add(defText, 1,  wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer2->Add(exText, 1,  wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
 
     searchBar = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
     searchBar->SetHint(_("Start typing a word"));
     searchBar->SetMinSize(wxSize(400,searchBar->GetBestHeight(400)));
-    searchBar->Bind(wxEVT_TEXT, &OnSearchWordChanged, this);
-    //searchBar->Bind(wxEVT_TEXT_ENTER, &OnSearchEnter, this);
+    searchBar->Bind(wxEVT_TEXT, &wsDictDialog::OnSearchWordChanged, this);
+    //searchBar->Bind(wxEVT_TEXT_ENTER, &wsDictDialog::OnSearchEnter, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(80,closeBtn->GetBestHeight(80)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
+    closeBtn->Bind(wxEVT_BUTTON, &wsDictDialog::CloseButtonClick, this);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(searchBar, 0, wxEXPAND | wxALL, 5);
@@ -766,9 +775,9 @@ void wsDictDialog::DoSearch(const wxString& search_txt)
     wxString definitions, examples, wordType;
 
     if (!GLOBALS::WordSyn.contains(word)) {
-        WordParser::LowerWord(word);
+        word = WordParser::LowerWordU8(search_txt);
         if (!GLOBALS::WordSyn.contains(word))
-            WordParser::UpperWord(word);
+            word = WordParser::UpperWordU8(search_txt);
     }
 
     if (GLOBALS::WordSyn.contains(word)) {
@@ -864,23 +873,25 @@ void wsDictDialog::CloseButtonClick(wxCommandEvent& event)
 wsTipsDialog::wsTipsDialog(wxWindow* parent, const wxString& caption, const wxPoint& pos, const wxSize sz) :
     wxDialog(parent, wxID_ANY, caption, pos, sz)
 {
-    label1 = new wxStaticText(this, wxID_ANY, wxEmptyString);
-    label1->SetMinSize(wxSize(300,label1->GetBestHeight(300)));
-    tipIndex = std::abs(rand()) % tips.size();
-    label1->SetLabelText(tips[tipIndex]);
-
     nextBtn = new wxButton(this, wxID_ANY, _("Next"));
     nextBtn->SetMinSize(wxSize(80,nextBtn->GetBestHeight(80)));
-    nextBtn->Bind(wxEVT_BUTTON, &NextButtonClick, this);
+    nextBtn->Bind(wxEVT_BUTTON, &wsTipsDialog::NextButtonClick, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(80,closeBtn->GetBestHeight(80)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
-
-    wxBitmap bmp(wxImage(_T("./files/icons/tips.png")));
-    infoIcon = new wxStaticBitmap(this, wxID_ANY, bmp);
+    closeBtn->Bind(wxEVT_BUTTON, &wsTipsDialog::CloseButtonClick, this);
 
     wxStaticBoxSizer* sizerRow = new wxStaticBoxSizer(wxHORIZONTAL, this, _("TIP"));
+
+    label1 = new wxStaticText(sizerRow->GetStaticBox(), wxID_ANY, wxEmptyString);
+    label1->SetMinSize(wxSize(300,100));
+    label1->SetMaxSize(wxSize(300,100));
+    tipIndex = std::abs(rand()) % tips.size();
+    label1->SetLabelText(tips[tipIndex]);
+
+    wxBitmap bmp(wxImage(_T("./icons/tips.png")));
+    infoIcon = new wxStaticBitmap(sizerRow->GetStaticBox(), wxID_ANY, bmp);
+
     sizerRow->Add(infoIcon, 0, wxALL, 5);
     sizerRow->Add(label1, 1,  wxEXPAND | wxALL, 5);
 
@@ -917,23 +928,22 @@ wsAboutDialog::wsAboutDialog(wxWindow* parent, const wxString& caption, const wx
     wxDialog(parent, wxID_ANY, caption, pos, sz)
 {
     wxString bgCol = GetBackgroundColour().GetAsString();
-    wxString ver = std::string(APP_VER) + "<br>" + wxbuildinfo(long_f);
-    wxString msg = "<html><body style='background-color:"+bgCol+"'><b>Wordsmith Text Editor</b><br><br>Windows Release Build v" +
-                    ver + "<br><br>© Bitfreak Software - <a href='https://bitfreak.info'>www.bitfreak.info</a></body></html>";
+    wxString msg = "<html><body style='background-color:"+bgCol+"'><b>Wordsmith Text Editor</b><br><br>" + wxbuildinfo(long_f) +
+                   "<br><br>&copy; Bitfreak Software - <a href='https://bitfreak.info'>www.bitfreak.info</a></body></html>";
 
     aboutHTML = new wsHtmlWindow(this, wxID_ANY);
-    aboutHTML->SetMinSize(wxSize(360,136));
+    aboutHTML->SetMinSize(wxSize(360,150));
     aboutHTML->SetPage(msg);
 
     checkBtn = new wxButton(this, wxID_ANY, _("Check for Update"));
     checkBtn->SetMinSize(wxSize(150,checkBtn->GetBestHeight(150)));
-    checkBtn->Bind(wxEVT_BUTTON, &CheckButtonClick, this);
+    checkBtn->Bind(wxEVT_BUTTON, &wsAboutDialog::CheckButtonClick, this);
 
     closeBtn = new wxButton(this, wxID_ANY, _("Close"));
     closeBtn->SetMinSize(wxSize(80,closeBtn->GetBestHeight(80)));
-    closeBtn->Bind(wxEVT_BUTTON, &CloseButtonClick, this);
+    closeBtn->Bind(wxEVT_BUTTON, &wsAboutDialog::CloseButtonClick, this);
 
-    wxBitmap bmp(wxImage(_T("./files/icons/app_icon_x48.png")));
+    wxBitmap bmp(wxImage(_T("./icons/app_icon_x48.png")));
     appIcon = new wxStaticBitmap(this, wxID_ANY, bmp);
 
     wxBoxSizer* sizerRow = new wxBoxSizer(wxHORIZONTAL);
@@ -968,7 +978,7 @@ void wsAboutDialog::CheckButtonClick(wxCommandEvent& event)
 
     if (!webReq.IsOk()) return;
 
-    Bind(wxEVT_WEBREQUEST_STATE, OnStateChange, this);
+    Bind(wxEVT_WEBREQUEST_STATE, &wsAboutDialog::OnStateChange, this);
 
     webReq.Start();
 }
@@ -1035,13 +1045,10 @@ void wsAboutDialog::ShowDialog()
 
 wsHtmlWindow::wsHtmlWindow(wxWindow* parent, wxWindowID id, const wxPoint& pos, const wxSize& size, long style) :
     wxHtmlWindow(parent, id, pos, size, style)
-{
-    Bind(wxEVT_HTML_LINK_CLICKED, &wsHtmlWindow::OnLinkClicked, this);
-}
+{}
 
-void wsHtmlWindow::OnLinkClicked(const wxHtmlLinkEvent& event)
+void wsHtmlWindow::OnLinkClicked(const wxHtmlLinkInfo& info)
 {
-    wxHtmlLinkInfo info = event.GetLinkInfo();
     wxString url = info.GetHref();
     wxLaunchDefaultBrowser(url);
 }
@@ -1056,24 +1063,24 @@ HTMLFrame::HTMLFrame() :
 
     wxMenu* fileMenu = new wxMenu();
     wxMenuItem* newMenuItem = new wxMenuItem(fileMenu, wxNewId(), _("Close"), wxEmptyString, wxITEM_NORMAL);
-    Connect(newMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&OnCloseClick);
+    Connect(newMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&HTMLFrame::OnCloseClick);
     fileMenu->Append(newMenuItem);
     MenuBar1->Append(fileMenu, _("&File"));
 
     wxMenu* viewMenu = new wxMenu();
     mdMenuItem = new wxMenuItem(viewMenu, wxNewId(), _("Markdown"), wxEmptyString, wxITEM_CHECK);
-    Connect(mdMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&SetMode0);
+    Connect(mdMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&HTMLFrame::SetMode0);
     viewMenu->Append(mdMenuItem);
     mdMenuItem->Check(true);
 
     htmlMenuItem = new wxMenuItem(viewMenu, wxNewId(), _("HTML"), wxEmptyString, wxITEM_CHECK);
-    Connect(htmlMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&SetMode1);
+    Connect(htmlMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&HTMLFrame::SetMode1);
     viewMenu->Append(htmlMenuItem);
     htmlMenuItem->Check(false);
     viewMenu->AppendSeparator();
 
     newMenuItem = new wxMenuItem(viewMenu, wxNewId(), _("Refresh"), wxEmptyString, wxITEM_NORMAL);
-    Connect(newMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&ReloadPage);
+    Connect(newMenuItem->GetId(), wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&HTMLFrame::ReloadPage);
     viewMenu->Append(newMenuItem);
     MenuBar1->Append(viewMenu, _("&View"));
 
@@ -1082,7 +1089,7 @@ HTMLFrame::HTMLFrame() :
     webView = wxWebView::New(this, wxID_ANY, wxWebViewDefaultURLStr, wxDefaultPosition, wxDefaultSize, wxWebViewBackendDefault, wxBORDER_NONE);
     webView->EnableContextMenu(false);
     //webView->EnableAccessToDevTools(true);
-    webView->Bind(wxEVT_WEBVIEW_NAVIGATING, OnNavigationRequest, this);
+    webView->Bind(wxEVT_WEBVIEW_NAVIGATING, &HTMLFrame::OnNavigationRequest, this);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(webView, 1, wxEXPAND);
@@ -1090,14 +1097,14 @@ HTMLFrame::HTMLFrame() :
 
     CenterOnScreen();
 
-    Bind(wxEVT_CLOSE_WINDOW, &OnClose, this);
+    Bind(wxEVT_CLOSE_WINDOW, &HTMLFrame::OnClose, this);
 
     std::string errStr;
 
     if (wxSystemSettings::GetAppearance().IsDark()) {
-        cssStr = ReadFileStr(u8"./files/css/md_dark.css", errStr);
+        cssStr = ReadFileStr(u8"./css/md_dark.css", errStr);
     } else {
-        cssStr = ReadFileStr(u8"./files/css/md_light.css", errStr);
+        cssStr = ReadFileStr(u8"./css/md_light.css", errStr);
     }
 
     if (!errStr.empty()) wxMessageBox(errStr, _("Error"), wxOK|wxICON_ERROR|wxCENTER);
@@ -1140,12 +1147,12 @@ void HTMLFrame::ReloadPage()
             errStr = WriteFileStr((const char8_t*)tmpFile.utf8_string().c_str(), htmlStr);
 
             if (errStr.empty())
-                webView->LoadURL(tmpFile);
+                webView->LoadURL("file:///" + tmpFile);
         } else {
             wxMessageBox(errStr, _("Error"), wxOK|wxICON_ERROR|wxCENTER);
         }
     } else {
-        webView->LoadURL(filePath);
+        webView->LoadURL("file:///" + filePath);
     }
 }
 
@@ -1210,7 +1217,7 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     SetMinSize(wxSize(500,350));
     {
         wxIcon FrameIcon;
-        FrameIcon.CopyFromBitmap(wxBitmap(wxImage(_T("./files/icons/app_icon.png"))));
+        FrameIcon.CopyFromBitmap(wxBitmap(wxImage(_T("./icons/app_icon.png"))));
         SetIcon(FrameIcon);
     }
     AuiManager1 = new wxAuiManager(this, wxAUI_MGR_DEFAULT);
@@ -1357,21 +1364,22 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     StatusBar1->SetStatusStyles(4,__wxStatusBarStyles_1);
     SetStatusBar(StatusBar1);
     ToolBar1 = new wxToolBar(this, ID_TOOLBAR1, wxDefaultPosition, wxDefaultSize, wxTB_HORIZONTAL, _T("ID_TOOLBAR1"));
-    NewToolBarBtn = ToolBar1->AddTool(new_btn, _("New"), wxBitmap(wxImage(_T("./files/icons/new_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("New file"), _("Create new file"));
-    OpenToolBarBtn = ToolBar1->AddTool(open_btn, _("Open"), wxBitmap(wxImage(_T("./files/icons/open_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Open file"), _("Open file"));
-    SaveToolBarBtn = ToolBar1->AddTool(save_btn, _("Save"), wxBitmap(wxImage(_T("./files/icons/save_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Save file"), _("Save file"));
-    SaveAsToolBarBtn = ToolBar1->AddTool(saveas_btn, _("Save As"), wxBitmap(wxImage(_T("./files/icons/saveas_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Save file as"), _("Save file with new name"));
-    UndoToolBarBtn = ToolBar1->AddTool(undo_btn, _("Undo"), wxBitmap(wxImage(_T("./files/icons/undo_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Undo action"), _("Undo last action"));
-    RedoToolBarBtn = ToolBar1->AddTool(redo_btn, _("Redo"), wxBitmap(wxImage(_T("./files/icons/redo_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Redo action"), _("Redo last action"));
-    CutToolBarBtn = ToolBar1->AddTool(cut_btn, _("Cut"), wxBitmap(wxImage(_T("./files/icons/cut_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Cut text"), _("Cut text"));
-    CopyToolBarBtn = ToolBar1->AddTool(copy_btn, _("Copy"), wxBitmap(wxImage(_T("./files/icons/copy_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Copy text"), _("Copy text"));
-    PasteToolBarBtn = ToolBar1->AddTool(paste_btn, _("Paste"), wxBitmap(wxImage(_T("./files/icons/paste_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Paste text"), _("Paste text"));
-    FindToolBarBtn = ToolBar1->AddTool(find_btn, _("Find"), wxBitmap(wxImage(_T("./files/icons/search_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Find text"), _("Find text"));
-    DictToolBarBtn = ToolBar1->AddTool(dict_btn, _("Dict"), wxBitmap(wxImage(_T("./files/icons/book_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Show dictionary"), _("Show dictionary"));
-    TipsToolBarBtn = ToolBar1->AddTool(tips_btn, _("Tips"), wxBitmap(wxImage(_T("./files/icons/tips_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Show tips"), _("Show helpful tips"));
+    NewToolBarBtn = ToolBar1->AddTool(new_btn, _("New"), wxBitmap(wxImage(_T("./icons/new_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("New file"), _("Create new file"));
+    OpenToolBarBtn = ToolBar1->AddTool(open_btn, _("Open"), wxBitmap(wxImage(_T("./icons/open_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Open file"), _("Open file"));
+    SaveToolBarBtn = ToolBar1->AddTool(save_btn, _("Save"), wxBitmap(wxImage(_T("./icons/save_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Save file"), _("Save file"));
+    SaveAsToolBarBtn = ToolBar1->AddTool(saveas_btn, _("Save As"), wxBitmap(wxImage(_T("./icons/saveas_file_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Save file as"), _("Save file with new name"));
+    UndoToolBarBtn = ToolBar1->AddTool(undo_btn, _("Undo"), wxBitmap(wxImage(_T("./icons/undo_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Undo action"), _("Undo last action"));
+    RedoToolBarBtn = ToolBar1->AddTool(redo_btn, _("Redo"), wxBitmap(wxImage(_T("./icons/redo_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Redo action"), _("Redo last action"));
+    CutToolBarBtn = ToolBar1->AddTool(cut_btn, _("Cut"), wxBitmap(wxImage(_T("./icons/cut_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Cut text"), _("Cut text"));
+    CopyToolBarBtn = ToolBar1->AddTool(copy_btn, _("Copy"), wxBitmap(wxImage(_T("./icons/copy_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Copy text"), _("Copy text"));
+    PasteToolBarBtn = ToolBar1->AddTool(paste_btn, _("Paste"), wxBitmap(wxImage(_T("./icons/paste_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Paste text"), _("Paste text"));
+    FindToolBarBtn = ToolBar1->AddTool(find_btn, _("Find"), wxBitmap(wxImage(_T("./icons/search_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Find text"), _("Find text"));
+    DictToolBarBtn = ToolBar1->AddTool(dict_btn, _("Dict"), wxBitmap(wxImage(_T("./icons/book_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Show dictionary"), _("Show dictionary"));
+    TipsToolBarBtn = ToolBar1->AddTool(tips_btn, _("Tips"), wxBitmap(wxImage(_T("./icons/tips_x32.png"))), wxNullBitmap, wxITEM_NORMAL, _("Show tips"), _("Show helpful tips"));
     ToolBar1->Realize();
     SetToolBar(ToolBar1);
-    FileDialog1 = new wxFileDialog(this, _("Select file"), wxEmptyString, wxEmptyString, wxFileSelectorDefaultWildcardStr, wxFD_DEFAULT_STYLE, wxDefaultPosition, wxDefaultSize, _T("wxFileDialog"));
+    FileOpenDialog1 = new wxFileDialog(this, _("Open file"), wxEmptyString, wxEmptyString, wxFileSelectorDefaultWildcardStr, wxFD_OPEN|wxFD_FILE_MUST_EXIST, wxDefaultPosition, wxDefaultSize, _T("wxFileDialog"));
+    FileSaveDialog1 = new wxFileDialog(this, _("Save file"), wxEmptyString, wxEmptyString, wxFileSelectorDefaultWildcardStr, wxFD_SAVE|wxFD_OVERWRITE_PROMPT, wxDefaultPosition, wxDefaultSize, _T("wxFileDialog"));
     ErrorDialog1 = new wxMessageDialog(this, wxEmptyString, _("Error"), wxOK|wxICON_ERROR, wxDefaultPosition);
     wxString __wxSingleChoiceDialogChoices_1[3] =
     {
@@ -1463,36 +1471,36 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
 
     SessionWatch.Start();
 
-    Connect(wxID_ANY, wxEVT_FIND_CLOSE, (wxObjectEventFunction)&OnFindClose);
-    Connect(wxID_ANY, wxEVT_FIND, (wxObjectEventFunction)&OnFindFirst);
-    Connect(wxID_ANY, wxEVT_FIND_NEXT, (wxObjectEventFunction)&OnFindNext);
-    Connect(wxID_ANY, wxEVT_FIND_REPLACE, (wxObjectEventFunction)&OnFindReplace);
-    Connect(wxID_ANY, wxEVT_FIND_REPLACE_ALL, (wxObjectEventFunction)&OnFindReplaceAll);
+    Connect(wxID_ANY, wxEVT_FIND_CLOSE, (wxObjectEventFunction)&WordsmithFrame::OnFindClose);
+    Connect(wxID_ANY, wxEVT_FIND, (wxObjectEventFunction)&WordsmithFrame::OnFindFirst);
+    Connect(wxID_ANY, wxEVT_FIND_NEXT, (wxObjectEventFunction)&WordsmithFrame::OnFindNext);
+    Connect(wxID_ANY, wxEVT_FIND_REPLACE, (wxObjectEventFunction)&WordsmithFrame::OnFindReplace);
+    Connect(wxID_ANY, wxEVT_FIND_REPLACE_ALL, (wxObjectEventFunction)&WordsmithFrame::OnFindReplaceAll);
 
-    ToolBar1->Bind(wxEVT_TOOL_ENTER, &OnMenuHover, this);
+    ToolBar1->Bind(wxEVT_TOOL_ENTER, &WordsmithFrame::OnMenuHover, this);
 
-    FileMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    EditMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    ViewMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    InsertMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    ToolsMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    SettingsMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
-    HelpMenu->Bind(wxEVT_MENU_CLOSE, &OnMenuClose, this);
+    FileMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    EditMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    ViewMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    InsertMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    ToolsMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    SettingsMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
+    HelpMenu->Bind(wxEVT_MENU_CLOSE, &WordsmithFrame::OnMenuClose, this);
 
-    FileMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    EditMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    ViewMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    InsertMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    ToolsMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    SettingsMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
-    HelpMenu->Bind(wxEVT_MENU_OPEN, &OnMenuOpen, this);
+    FileMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    EditMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    ViewMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    InsertMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    ToolsMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    SettingsMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
+    HelpMenu->Bind(wxEVT_MENU_OPEN, &WordsmithFrame::OnMenuOpen, this);
 
-    initTimer.Bind(wxEVT_TIMER, &OnInitTimerTrigger, this);
-    infoTimer.Bind(wxEVT_TIMER, &OnInfoTimerTrigger, this);
-    toolsTimer.Bind(wxEVT_TIMER, &OnToolsTimerTrigger, this);
-    statsTimer.Bind(wxEVT_TIMER, &OnStatsTimerTrigger, this);
-    ackeyTimer.Bind(wxEVT_TIMER, &OnACKeyTimerTrigger, this);
-    spellTimer.Bind(wxEVT_TIMER, &OnSpellCheckTrigger, this);
+    initTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnInitTimerTrigger, this);
+    infoTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnInfoTimerTrigger, this);
+    toolsTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnToolsTimerTrigger, this);
+    statsTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnStatsTimerTrigger, this);
+    ackeyTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnACKeyTimerTrigger, this);
+    spellTimer.Bind(wxEVT_TIMER, &WordsmithFrame::OnSpellCheckTrigger, this);
 
     docViewer = new HTMLFrame();
     docViewer->Hide();
@@ -1505,10 +1513,10 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     aboutDialog = new wsAboutDialog(this, _("About"));
 
     AuiNotebook1->SetArtProvider(new wxAuiDefaultTabArt());
-    //AuiManager1->Update();
 
     std::string errStr, selFile;
-    std::string tabFiles = ReadFileStr(u8"./files/open_files_list.ws", errStr);
+    std::u8string oflFile = GLOBALS::UserDataDir + u8"/open_files_list.ws";
+    std::string tabFiles = FileExists(oflFile) ? ReadFileStr(oflFile, errStr) : "";
 
     if (errStr.empty() && !tabFiles.empty()) {
 
@@ -1542,6 +1550,12 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
         }
     }
 
+    for (const auto& pathPair : GLOBALS::ArgFiles)
+    {
+        NewPadTab();
+        LoadDocument(pathPair.first, FileName(pathPair.second));
+    }
+
     if (GLOBALS::TabPageSTC == nullptr) {
         NewPadTab();
     } else if (!selFile.empty()) {
@@ -1550,11 +1564,18 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
 
     auto loadFunc = [this] () {
 
-        if (!(WordParser::LoadWordNet(GLOBALS::WordNet, GLOBALS::WordSyn, "./files/wordnet.txt") &&
-        WordParser::LoadWordWeb(GLOBALS::WordMap, GLOBALS::WordVec, "./files/wordweb.txt") &&
-        WordParser::LoadSimWords(GLOBALS::SimWords, "./files/wordsims.txt")))
-        {
-            ErrorDialog1->SetMessage(_("Failed to load word files. Ensure there's a folder called 'files' along with the executable."));
+        wxString errStr;
+
+        if (!WordParser::LoadWordNet(GLOBALS::WordNet, GLOBALS::WordSyn, "./wordnet.txt")) {
+            errStr = _("Failed to load wordnet.txt, make sure it's located at: ") + wxString::FromUTF8(GLOBALS::Settings["CWD"]);
+        } else if (!WordParser::LoadWordWeb(GLOBALS::WordMap, GLOBALS::WordVec, "./wordweb.txt")) {
+            errStr = _("Failed to load wordweb.txt, make sure it's located at: ") + wxString::FromUTF8(GLOBALS::Settings["CWD"]);
+        } else if (!WordParser::LoadSimWords(GLOBALS::SimWords, "./wordsims.txt")) {
+            errStr = _("Failed to load wordsims.txt, make sure it's located at: ") + wxString::FromUTF8(GLOBALS::Settings["CWD"]);
+        }
+
+        if (!errStr.empty()) {
+            ErrorDialog1->SetMessage(errStr);
             ErrorDialog1->ShowModal();
             return;
         }
@@ -1588,7 +1609,8 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
 WordsmithFrame::~WordsmithFrame()
 {
     //(*Destroy(WordsmithFrame)
-    FileDialog1->Destroy();
+    FileOpenDialog1->Destroy();
+    FileSaveDialog1->Destroy();
     ErrorDialog1->Destroy();
     SingleChoiceDialog1->Destroy();
     MessageDialog1->Destroy();
@@ -1658,9 +1680,8 @@ void WordsmithFrame::ShowPageDialog()
 
 void WordsmithFrame::ShowOpenDialog()
 {
-    FileDialog1->SetWindowStyleFlag(wxFD_OPEN|wxFD_FILE_MUST_EXIST);
-    if (FileDialog1->ShowModal() == wxID_CANCEL) return;
-    const wxString filePath(FileDialog1->GetPath());
+    if (FileOpenDialog1->ShowModal() == wxID_CANCEL) return;
+    const wxString filePath(FileOpenDialog1->GetPath());
 
     if (SelectTabPage(filePath)) return;
 
@@ -1674,7 +1695,7 @@ void WordsmithFrame::ShowOpenDialog()
 
     try {
         const std::uintmax_t fileSize = FileSize((const char8_t*)filePath.utf8_string().c_str());
-        const wxString fileName(FileDialog1->GetFilename());
+        const wxString fileName(FileOpenDialog1->GetFilename());
 
         if (fileSize > INT_MAX) {
             ErrorDialog1->SetMessage(_("The file cannot be loaded because it is too large."));
@@ -1699,11 +1720,9 @@ void WordsmithFrame::ShowSaveDialog(bool force_show)
 
     try {
         if (force_show || GLOBALS::TabPageSTC->GetFilePath().empty()) {
-            FileDialog1->SetWindowStyleFlag(wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
-            if (FileDialog1->ShowModal() == wxID_CANCEL) return;
-            GLOBALS::TabPageSTC->SetFilePath(FileDialog1->GetPath());
-            GLOBALS::TabPageSTC->SetFileName(FileDialog1->GetFilename());
-            AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), GLOBALS::TabPageSTC->GetFileName());
+            if (FileSaveDialog1->ShowModal() == wxID_CANCEL) return;
+            GLOBALS::TabPageSTC->SetFilePath(FileSaveDialog1->GetPath());
+            GLOBALS::TabPageSTC->SetFileName(FileSaveDialog1->GetFilename());
         }
 
         if (GLOBALS::TabPageSTC->SaveFile(GLOBALS::TabPageSTC->GetFilePath())) {
@@ -1714,30 +1733,56 @@ void WordsmithFrame::ShowSaveDialog(bool force_show)
         } else {
             ErrorDialog1->SetMessage(_("Failed to save file: ") + GLOBALS::TabPageSTC->GetFilePath());
             ErrorDialog1->ShowModal();
+            GLOBALS::TabPageSTC->SetFilePath("");
         }
     } catch (...) {
         ErrorDialog1->SetMessage(_("Error saving file: ") + GLOBALS::TabPageSTC->GetFilePath());
         ErrorDialog1->ShowModal();
     }
-    /*wxFileOutputStream outputStream(FileDialog1->GetPath());
+    /*wxFileOutputStream outputStream(FileSaveDialog1->GetPath());
     if (outputStream.IsOk())
         outputStream.WriteAll(GLOBALS::TabPageSTC->GetText().data(), GLOBALS::TabPageSTC->GetLength());
     outputStream.Close();*/
 }
 
+void WordsmithFrame::ShowFindDialog()
+{
+    findDialog = new wxFindReplaceDialog(this, &findData, wxEmptyString, 0);
+    findDialog->SetTitle(_("Find"));
+}
+
+void WordsmithFrame::ShowReplaceDialog()
+{
+    findDialog = new wxFindReplaceDialog(this, &findData, wxEmptyString, wxFR_REPLACEDIALOG);
+    findDialog->SetTitle(_("Find & Replace"));
+}
+
 void WordsmithFrame::ShowSearchDialog(bool show_replace)
 {
     if (findDialog == nullptr) {
-        findDialog = new wxFindReplaceDialog(this, &findData, wxEmptyString, 0);
+
         if (show_replace) {
-            findDialog->SetWindowStyleFlag(wxFR_REPLACEDIALOG);
-            findDialog->SetTitle(_("Find & Replace"));
+            ShowReplaceDialog();
         } else {
-            findDialog->SetTitle(_("Find"));
+            ShowFindDialog();
         }
+
+        findDialog->Show();
+
+    } else if (searchMode != show_replace) {
+
+        findDialog->Destroy();
+
+        if (show_replace) {
+            ShowReplaceDialog();
+        } else {
+            ShowFindDialog();
+        }
+
         findDialog->Show();
     }
 
+    searchMode = show_replace;
     findDialog->Raise();
     findDialog->SetFocus();
 }
@@ -1769,17 +1814,17 @@ void WordsmithFrame::LoadDocument(const wxString& file_path, const wxString& fil
 
 void WordsmithFrame::BindTextCtrl(wsTextCtrl* stc)
 {
-    stc->Bind(wxEVT_STC_AUTOCOMP_COMPLETED, &OnAutoCompleted, this);
-    stc->Bind(wxEVT_STC_MODIFIED, &OnTextChanged, this);
-    stc->Bind(wxEVT_STC_DWELLSTART, &OnMouseHover, this);
-    stc->Bind(wxEVT_STC_DWELLEND, &OnMouseHoverEnd, this);
-    stc->Bind(wxEVT_LEFT_UP, &OnMouseUp, this);
-    stc->Bind(wxEVT_RIGHT_UP, &OnMouseUp, this);
-    stc->Bind(wxEVT_RIGHT_DOWN, &OnMouseRightDown, this);
-    stc->Bind(wxEVT_CHAR, &OnKeyPress, this);
-    stc->Bind(wxEVT_KEY_UP, &OnKeyUp, this);
-    stc->Bind(wxEVT_CONTEXT_MENU, &OnContextMenu, this);
-    stc->Bind(wxEVT_KILL_FOCUS, &OnTabLoseFocus, this);
+    stc->Bind(wxEVT_STC_AUTOCOMP_COMPLETED, &WordsmithFrame::OnAutoCompleted, this);
+    stc->Bind(wxEVT_STC_MODIFIED, &WordsmithFrame::OnTextChanged, this);
+    stc->Bind(wxEVT_STC_DWELLSTART, &WordsmithFrame::OnMouseHover, this);
+    stc->Bind(wxEVT_STC_DWELLEND, &WordsmithFrame::OnMouseHoverEnd, this);
+    stc->Bind(wxEVT_LEFT_UP, &WordsmithFrame::OnMouseUp, this);
+    stc->Bind(wxEVT_RIGHT_UP, &WordsmithFrame::OnMouseUp, this);
+    stc->Bind(wxEVT_RIGHT_DOWN, &WordsmithFrame::OnMouseRightDown, this);
+    stc->Bind(wxEVT_CHAR, &WordsmithFrame::OnKeyPress, this);
+    stc->Bind(wxEVT_KEY_UP, &WordsmithFrame::OnKeyUp, this);
+    stc->Bind(wxEVT_CONTEXT_MENU, &WordsmithFrame::OnContextMenu, this);
+    stc->Bind(wxEVT_KILL_FOCUS, &WordsmithFrame::OnTabLoseFocus, this);
 }
 
 void WordsmithFrame::NewPadTab(int wrap, int zoom)
@@ -1818,26 +1863,24 @@ void WordsmithFrame::UpdateStatusBar()
 void WordsmithFrame::UpdateToolBar()
 {
     if (GLOBALS::TabPageSTC != nullptr) {
-        SaveAsToolBarBtn->Enable(true);
-        SaveToolBarBtn->Enable(GLOBALS::TabPageSTC->IsChanged());
-        UndoToolBarBtn->Enable(GLOBALS::TabPageSTC->CanUndo());
-        RedoToolBarBtn->Enable(GLOBALS::TabPageSTC->CanRedo());
-        CutToolBarBtn->Enable(GLOBALS::TabPageSTC->CanCut());
-        CopyToolBarBtn->Enable(GLOBALS::TabPageSTC->CanCopy());
-        PasteToolBarBtn->Enable(GLOBALS::TabPageSTC->CanPaste());
-        FindToolBarBtn->Enable(true);
+        ToolBar1->EnableTool(SaveAsToolBarBtn->GetId(), true);
+        ToolBar1->EnableTool(SaveToolBarBtn->GetId(), GLOBALS::TabPageSTC->IsChanged() && !GLOBALS::TabPageSTC->GetFilePath().empty());
+        ToolBar1->EnableTool(UndoToolBarBtn->GetId(), GLOBALS::TabPageSTC->CanUndo());
+        ToolBar1->EnableTool(RedoToolBarBtn->GetId(), GLOBALS::TabPageSTC->CanRedo());
+        ToolBar1->EnableTool(CutToolBarBtn->GetId(), GLOBALS::TabPageSTC->CanCut());
+        ToolBar1->EnableTool(CopyToolBarBtn->GetId(), GLOBALS::TabPageSTC->CanCopy());
+        ToolBar1->EnableTool(PasteToolBarBtn->GetId(), GLOBALS::TabPageSTC->CanPaste());
+        ToolBar1->EnableTool(FindToolBarBtn->GetId(), true);
     } else {
-        SaveToolBarBtn->Enable(false);
-        SaveAsToolBarBtn->Enable(false);
-        UndoToolBarBtn->Enable(false);
-        RedoToolBarBtn->Enable(false);
-        CutToolBarBtn->Enable(false);
-        CopyToolBarBtn->Enable(false);
-        PasteToolBarBtn->Enable(false);
-        FindToolBarBtn->Enable(false);
+        ToolBar1->EnableTool(SaveToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(SaveAsToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(UndoToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(RedoToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(CutToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(CopyToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(PasteToolBarBtn->GetId(), false);
+        ToolBar1->EnableTool(FindToolBarBtn->GetId(), false);
     }
-
-    ToolBar1->Realize();
 }
 
 bool WordsmithFrame::LoadWebViewer(bool show_msg)
@@ -1941,7 +1984,7 @@ void WordsmithFrame::OnOpenFileClick(wxCommandEvent& event)
 void WordsmithFrame::OnSaveClick(wxCommandEvent& event)
 {
     if (GLOBALS::TabPageSTC == nullptr) return;
-    ShowSaveDialog();
+    ShowSaveDialog(GLOBALS::TabPageSTC->GetFilePath().empty());
 
     if (!toolsTimer.IsRunning())
         toolsTimer.Start(10, true);
@@ -2157,8 +2200,8 @@ void WordsmithFrame::OnPreferencesClick(wxCommandEvent& event)
         settingsDialog->SetFocus();
         settingsDialog->Raise();
     } else {
-        settingsDialog->Reset();
         settingsDialog->Show();
+        settingsDialog->Reset();
         settingsDialog->Center();
     }
 }
@@ -2235,7 +2278,7 @@ void WordsmithFrame::OnAutoCompleted(wxStyledTextEvent& event)
 
 void WordsmithFrame::OnTextChanged(wxStyledTextEvent& event)
 {
-    //wxBitmap TabImage_BMP(wxImage(_T("./files/icons/edit_icon.png")));
+    //wxBitmap TabImage_BMP(wxImage(_T("./icons/edit_icon.png")));
     //AuiNotebook1->SetPageBitmap(AuiNotebook1->GetSelection(), *TabImage_BMP);
 
     if (!GLOBALS::TabPageSTC->IsChanged()) {
@@ -2257,7 +2300,11 @@ void WordsmithFrame::OnTextChanged(wxStyledTextEvent& event)
 
 void WordsmithFrame::OnMouseHover(wxStyledTextEvent& event)
 {
-    if (GLOBALS::TabPageSTC == nullptr || !GLOBALS::TabPageSTC->IsMouseInWindow()) return;
+    #if defined(__WXMSW__)
+    if (GLOBALS::TabPageSTC == nullptr || !GLOBALS::TabPageSTC->HasFocus() || !GLOBALS::TabPageSTC->IsMouseInWindow()) return;
+    #else
+    if (GLOBALS::TabPageSTC == nullptr || !IsMouseInWindow(GLOBALS::TabPageSTC)) return;
+    #endif
 
     int pos = GLOBALS::TabPageSTC->PositionFromPoint(wxPoint(event.GetX(), event.GetY()));
 
@@ -2271,15 +2318,11 @@ void WordsmithFrame::OnMouseHover(wxStyledTextEvent& event)
         wxString hovWord(GLOBALS::TabPageSTC->GetTextRange(wordStart, wordEnd));
         std::string word(hovWord.utf8_string());
 
-        if (!GLOBALS::WordSyn.contains(word)) {
-            WordParser::LowerWord(hovWord);
-            word = hovWord.utf8_string();
-        }
+        if (!GLOBALS::WordSyn.contains(word))
+            word = WordParser::LowerWordU8(hovWord);
 
-        if (!GLOBALS::WordSyn.contains(word)) {
-            WordParser::UpperWord(hovWord);
-            word = hovWord.utf8_string();
-        }
+        if (!GLOBALS::WordSyn.contains(word))
+            word = WordParser::UpperWordU8(hovWord);
 
         if (!GLOBALS::WordSyn.contains(word)) return;
 
@@ -2407,6 +2450,7 @@ void WordsmithFrame::OnSpellCheckTrigger(wxTimerEvent& event)
 
     int wordPos = 0;
     int curPos, endPos;
+    uint32_t firstChar;
     bool gotWord, gotDigit;
 
     for (int line = firstLine; line < lastLine; ++line)
@@ -2451,10 +2495,12 @@ void WordsmithFrame::OnSpellCheckTrigger(wxTimerEvent& event)
                     if (WordParser::IsJoin(word[word.length()-1]))
                         word.RemoveLast();
 
-                    std::string wordStr(WordParser::LowerWord(word).utf8_string());
-
-                    if (IsNotWord(wordStr))
-                        stc.IndicatorFillRange(wordPos, wordStr.length());
+                    if (IsNotWord(word.utf8_string())) {
+                        firstChar = word[0];
+                        WordParser::LowerWord(word);
+                        if (word[0] == firstChar || IsNotWord(word.utf8_string()))
+                            stc.IndicatorFillRange(wordPos, word.length());
+                    }
                 }
 
                 word.clear();
@@ -2468,10 +2514,12 @@ void WordsmithFrame::OnSpellCheckTrigger(wxTimerEvent& event)
             if (WordParser::IsJoin(word[word.length()-1]))
                 word.RemoveLast();
 
-            std::string wordStr(WordParser::LowerWord(word).utf8_string());
-
-            if (IsNotWord(wordStr))
-                stc.IndicatorFillRange(wordPos, wordStr.length());
+            if (IsNotWord(word.utf8_string())) {
+                firstChar = word[0];
+                WordParser::LowerWord(word);
+                if (word[0] == firstChar || IsNotWord(word.utf8_string()))
+                    stc.IndicatorFillRange(wordPos, word.length());
+            }
         }
     }
 
@@ -2621,7 +2669,7 @@ void WordsmithFrame::OnACKeyTimerTrigger(wxTimerEvent& event)
         if (preWord.empty()) {
             return;
         } else if (!GLOBALS::WordMap.contains(preWord)) {
-            preWord = WordParser::LowerWord(preChars).utf8_string();
+            preWord = WordParser::LowerWordU8(preChars);
             if (!GLOBALS::WordMap.contains(preWord)) return;
         }
 
@@ -2958,7 +3006,7 @@ void WordsmithFrame::OnMenuOpen(wxMenuEvent& event)
     bool tb(GLOBALS::TabPageSTC != nullptr);
 
     if (menu->GetTitle() == _("&File")) {
-        SaveMenuItem->Enable(tb && (GLOBALS::TabPageSTC->IsChanged() || GLOBALS::TabPageSTC->GetFilePath().empty()));
+        SaveMenuItem->Enable(tb);
         SaveAsMenuItem->Enable(tb);
         PreviewMenuItem->Enable(tb);
         PrintMenuItem->Enable(tb);
@@ -3060,7 +3108,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
 
             auto menuID = wxNewId();
             menu.Append(menuID, _("Add selection to phrases"));
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&OnAddPhrase);
+            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnAddPhrase);
 
             GLOBALS::LastPhrase = selText;
             addSep = true;
@@ -3068,7 +3116,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             goto SETUP_MENU;
         }
 
-        lowWord = WordParser::LowerWord(selText).utf8_string();
+        lowWord = WordParser::LowerWordU8(selText);
 
         if (selWord != lowWord) {
             isUpperWord = true;
@@ -3085,7 +3133,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             auto menuID = wxNewId();
 
             menu.Append(menuID, menuText);
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&OnRemoveWord);
+            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnRemoveWord);
 
         } else {
 
@@ -3096,7 +3144,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             auto menuID = wxNewId();
 
             menu.Append(menuID, menuText);
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&OnAddWord);
+            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnAddWord);
 
             auto suggestions = spellChecker.lookup(lowWord, yams::symspell::Verbosity::Closest);
 
@@ -3113,7 +3161,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
                 }
 
                 menu.Append(wxNewId(), _("Suggestions"), simMenu);
-                simMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &OnSwapWordClick, this);
+                simMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnSwapWordClick, this);
 
                 goto SETUP_MENU;
             }
@@ -3152,7 +3200,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
                 for (const std::string& syn : syns)
                     synMenu->Append(new wxMenuItem(synMenu, wxNewId(), wxString::FromUTF8(syn)));
 
-                synMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &OnSwapWordClick, this);
+                synMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnSwapWordClick, this);
                 menu.Append(wxNewId(), _("Synonyms"), synMenu);
             }
         }
@@ -3164,7 +3212,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             for (const auto& entry : words)
             {
                 std::string word(GLOBALS::WordVec[entry.first].first);
-                WordParser::LowerWord(word);
+                word = WordParser::LowerWordU8(wxString::FromUTF8(word));
 
                 if (word.length() > 1 && word != lowWord && !syns.contains(word))
                     if (!comWords.contains(word) && !GLOBALS::SkipWords.contains(word)) simWords.emplace(word);
@@ -3178,7 +3226,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             for (const auto& entry : words)
             {
                 std::string word(GLOBALS::WordVec[entry.first].first);
-                WordParser::LowerWord(word);
+                word = WordParser::LowerWordU8(wxString::FromUTF8(word));
 
                 if (word.length() > 1 && word != lowWord && !simWords.contains(word) && !syns.contains(word))
                     if (!comWords.contains(word) && !GLOBALS::SkipWords.contains(word)) lowWords.emplace(word);
@@ -3196,7 +3244,7 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             for (const auto& word : lowWords)
                 simMenu->Append(new wxMenuItem(simMenu, wxNewId(), wxString::FromUTF8(word)));
 
-            simMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &OnSwapWordClick, this);
+            simMenu->Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnSwapWordClick, this);
             menu.Append(wxNewId(), _("Related"), simMenu);
         }
     }
@@ -3221,13 +3269,13 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
     menu.AppendSeparator();
     menu.Append(wxID_SELECTALL, _("Select All"));
 
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnUndoClick, this, wxID_UNDO);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnRedoClick, this, wxID_REDO);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnCutClick, this, wxID_CUT);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnCopyClick, this, wxID_COPY);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnPasteClick, this, wxID_PASTE);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnDeleteClick, this, wxID_DELETE);
-    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &OnSelectAllClick, this, wxID_SELECTALL);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnUndoClick, this, wxID_UNDO);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnRedoClick, this, wxID_REDO);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnCutClick, this, wxID_CUT);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnCopyClick, this, wxID_COPY);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnPasteClick, this, wxID_PASTE);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnDeleteClick, this, wxID_DELETE);
+    menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnSelectAllClick, this, wxID_SELECTALL);
 
     stc.PopupMenu(&menu);
     event.Skip();
@@ -3454,9 +3502,9 @@ void WordsmithFrame::OnClose(wxCloseEvent& event)
     GLOBALS::Settings["WIN_WIDTH"] = std::to_string(sz.GetWidth());
     GLOBALS::Settings["WIN_HEIGHT"] = std::to_string(sz.GetHeight());
 
-    SaveConfigFile(u8"./files/settings.cfg", GLOBALS::Settings);
+    SaveConfigFile(GLOBALS::UserDataDir + u8"/settings.cfg", GLOBALS::Settings);
 
-    WriteFileStr(u8"./files/open_files_list.ws", tabFiles.utf8_string());
+    WriteFileStr(GLOBALS::UserDataDir + u8"/open_files_list.ws", tabFiles.utf8_string());
 
     wxTheClipboard->Flush();
 
