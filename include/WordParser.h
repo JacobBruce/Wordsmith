@@ -1,8 +1,12 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <algorithm>
 #include <locale>
+#include <cstring>
 #include <cstdint>
+#include <cuchar>
+#include <cerrno>
 #include <queue>
 #include <unordered_set>
 #include <parallel_hashmap/phmap.h>
@@ -45,70 +49,61 @@ namespace WordParser {
         return true;
     }
 
-	inline std::string U32ToU8(std::u32string_view u32str)
-	{
-		std::string u8str;
-		u8str.reserve(u32str.length());
+    inline std::string U32ToU8(std::u32string_view u32str)
+    {
+        std::string u8str;
+        u8str.reserve(u32str.length() * 2);
 
-		for (const char32_t& c : u32str)
-		{
-			if (c <= 0x7F) {
-				u8str.push_back(static_cast<char>(c));
-			} else if (c <= 0x7FF) {
-				u8str.push_back(static_cast<char>(0xC0 | (c >> 6)));
-				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
-			} else if (c <= 0xFFFF) {
-				u8str.push_back(static_cast<char>(0xE0 | (c >> 12)));
-				u8str.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
-				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
-			} else if (c <= 0x10FFFF) {
-				u8str.push_back(static_cast<char>(0xF0 | (c >> 18)));
-		        u8str.push_back(static_cast<char>(0x80 | ((c >> 12) & 0x3F)));
-				u8str.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
-				u8str.push_back(static_cast<char>(0x80 | (c & 0x3F)));
-			}
-		}
+        std::mbstate_t state{};
+        char buff[4];
 
-		return u8str;
-	}
+        for (char32_t cp : u32str)
+        {
+            size_t rc = std::c32rtomb(buff, cp, &state);
 
-	inline std::u32string U8ToU32(std::string_view u8str)
-	{
-		std::u32string u32str;
+            if (rc == static_cast<size_t>(-1))
+                continue;
 
-		for (size_t i=0; i < u8str.length();)
-		{
-			uint32_t cp = 0;
-			const uint8_t& c = u8str[i];
+            if (rc == 0) {
+                u8str.push_back('\0');
+            } else {
+                u8str.append(buff, rc);
+            }
+        }
 
-			if (c <= 0x7F) {
-				cp = c;
-				i++;
-			} else if ((c & 0xE0) == 0xC0) {
-				cp = (c & 0x1F) << 6;
-				cp |= (u8str[i + 1] & 0x3F);
-				i += 2;
-			} else if ((c & 0xF0) == 0xE0) {
-				cp = (c & 0x0F) << 12;
-				cp |= (u8str[i + 1] & 0x3F) << 6;
-				cp |= (u8str[i + 2] & 0x3F);
-				i += 3;
-			} else if ((c & 0xF8) == 0xF0) {
-				cp = (c & 0x07) << 18;
-				cp |= (u8str[i + 1] & 0x3F) << 12;
-				cp |= (u8str[i + 2] & 0x3F) << 6;
-				cp |= (u8str[i + 3] & 0x3F);
-				i += 4;
-			} else { // Invalid UTF-8 start byte
-				i++;
-				continue;
-			}
+        return u8str;
+    }
 
-			u32str += static_cast<char32_t>(cp);
-		}
+    inline std::u32string U8ToU32(std::string_view u8str)
+    {
+        std::u32string u32str;
+        u32str.reserve(u8str.length());
 
-		return u32str;
-	}
+        std::mbstate_t state{};
+        char32_t cp;
+
+        const char* ptr = u8str.data();
+        const char* end = ptr + u8str.length();
+
+        while (ptr < end)
+        {
+            size_t rc = std::mbrtoc32(&cp, ptr, static_cast<size_t>(end - ptr), &state);
+
+            if (rc == 0) {
+                u32str += cp;
+                ptr++;
+            } else if (rc >= 1 && rc <= 4) {
+                u32str += cp;
+                ptr += rc;
+            } else {
+                if (rc == static_cast<size_t>(-3)) u32str += cp;
+                std::mbrtoc32(nullptr, nullptr, 0, &state);
+                ptr++;
+            }
+        }
+
+        return u32str;
+    }
 
     inline uint32_t UTF8CharLen(const uint32_t& c)
     {
@@ -393,7 +388,7 @@ namespace WordParser {
         return true;
     }
 
-    inline void GenDictMap(std::vector<std::pair<std::string, uint32_t>> words, phmap::parallel_flat_hash_map<std::string, uint32_t>& index_map)
+    inline void GenIndexMap(std::vector<std::pair<std::string, uint32_t>> words, phmap::parallel_flat_hash_map<std::string, uint32_t>& index_map)
     {
         std::u32string lastWord;
 
@@ -409,6 +404,30 @@ namespace WordParser {
                 lastWord = word;
             }
         }
+    }
+
+    inline void BuildExtraVec(const phmap::parallel_flat_hash_map<std::string, std::pair<uint32_t,AfterLinks>>& word_map,
+                              const phmap::parallel_flat_hash_map<std::string, std::vector<std::string>>& word_syn,
+                              std::vector<std::pair<std::string, uint32_t>>& extra_vec)
+    {
+        extra_vec.clear();
+        extra_vec.reserve(50000);
+
+        for (const auto& entry : word_syn)
+        {
+            if (entry.first.find(' ') != std::string::npos)
+                continue;
+
+            if (word_map.contains(entry.first))
+                continue;
+
+            extra_vec.emplace_back(entry.first, 1);
+        }
+
+        std::sort(extra_vec.begin(), extra_vec.end(),
+            [](const std::pair<std::string, uint32_t>& a, const std::pair<std::string, uint32_t>& b) {
+                return a.first < b.first;
+        });
     }
 
     inline bool LoadWordNet(phmap::parallel_flat_hash_map<std::string, WordEntry>& word_net, phmap::parallel_flat_hash_map<std::string, std::vector<std::string>>& word_syn, std::string word_file)

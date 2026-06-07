@@ -9,22 +9,20 @@
 #include <wx/string.h>
 #include <md4c-html.h>
 
-static std::stringstream markdownInput;
-
 inline void md_process_output(const MD_CHAR* text, MD_SIZE size, void* userdata) {
-    markdownInput.write(text, size);
+	auto* out = static_cast<std::stringstream*>(userdata);
+	out->write(text, size);
 }
 
 inline std::string MDtoHTML(const std::string& str) {
-    static unsigned parserFlags = MD_FLAG_TABLES | MD_FLAG_TASKLISTS | MD_FLAG_STRIKETHROUGH | MD_FLAG_NOHTML;
-    static unsigned rendererFlags = 0;
+    const unsigned parserFlags = MD_FLAG_TABLES | MD_FLAG_TASKLISTS | MD_FLAG_STRIKETHROUGH | MD_FLAG_NOHTML;
+    const unsigned rendererFlags = 0;
 
-    markdownInput.str("");
-    markdownInput.clear();
+    std::stringstream markdownInput;
 
     int result = md_html(
         str.c_str(), str.length(),
-        md_process_output, NULL,
+        md_process_output, &markdownInput,
         parserFlags, rendererFlags
     );
 
@@ -223,49 +221,81 @@ inline void SplitStr(const std::string& text, const std::string& sep,
     }
 }
 
-inline std::string& TrimL(std::string &s, const char c)
+inline std::string JoinStr(const std::vector<std::string>& vec, const std::string& sep)
 {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [&](int ch) {
+    std::string res;
+
+    for (size_t i = 0; i < vec.size(); ++i)
+    {
+        res += vec[i];
+        if (i < vec.size() - 1)
+            res += sep;
+    }
+
+    return res;
+}
+
+inline std::string& TrimL(std::string& s, const uint8_t c)
+{
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [&](uint8_t ch) {
         return c != ch;
     }));
 
     return s;
 }
 
-inline std::string TrimL(const std::string &s, const char c)
+inline std::string TrimL(const std::string& s, const uint8_t c)
 {
 	std::string result(s);
 
-    result.erase(result.begin(), std::find_if(result.begin(), result.end(), [&](int ch) {
+    result.erase(result.begin(), std::find_if(result.begin(), result.end(), [&](uint8_t ch) {
         return c != ch;
     }));
 
     return result;
 }
 
-inline std::string& TrimR(std::string &s, const char c)
+inline std::string& TrimLeft(std::string& s, const std::string& chars)
 {
-    s.erase(std::find_if(s.rbegin(), s.rend(), [&](int ch) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [&](uint8_t ch) {
+        return chars.find(ch) == std::string::npos;
+    }));
+
+    return s;
+}
+
+inline std::string& TrimR(std::string& s, const uint8_t c)
+{
+    s.erase(std::find_if(s.rbegin(), s.rend(), [&](uint8_t ch) {
         return c != ch;
     }).base(), s.end());
 
     return s;
 }
 
-inline std::string TrimR(const std::string &s, const char c)
+inline std::string TrimR(const std::string& s, const uint8_t c)
 {
 	std::string result(s);
 
-    result.erase(std::find_if(result.rbegin(), result.rend(), [&](int ch) {
+    result.erase(std::find_if(result.rbegin(), result.rend(), [&](uint8_t ch) {
         return c != ch;
     }).base(), result.end());
 
     return result;
 }
 
-inline std::string& TrimLast(std::string &s, const char c)
+inline std::string& TrimRight(std::string& s, const std::string& chars)
 {
-    static size_t lastIndex;
+    s.erase(std::find_if(s.rbegin(), s.rend(), [&](uint8_t ch) {
+        return chars.find(ch) == std::string::npos;
+    }).base(), s.end());
+
+    return s;
+}
+
+inline std::string& TrimLast(std::string& s, const char c)
+{
+    size_t lastIndex;
     if (s.size() < 2) return s;
     lastIndex = s.size() - 1;
     if (s[lastIndex] == c)
@@ -273,9 +303,9 @@ inline std::string& TrimLast(std::string &s, const char c)
     return s;
 }
 
-inline std::string TrimLast(const std::string &s, const char c)
+inline std::string TrimLast(const std::string& s, const char c)
 {
-    static size_t lastIndex;
+    size_t lastIndex;
 	std::string result(s);
     if (s.size() < 2) return result;
     lastIndex = result.size() - 1;
@@ -284,20 +314,15 @@ inline std::string TrimLast(const std::string &s, const char c)
     return result;
 }
 
-inline std::string& TrimStr(std::string &s, const std::string &chars)
-{
-    for (const char& c : chars) TrimR(TrimL(s, chars[c]), chars[c]);
-
-    return s;
-}
-
-inline std::string TrimStr(const std::string &s, const std::string &chars)
+inline std::string TrimStr(const std::string& s, const std::string& chars = " \t\n\r")
 {
 	std::string result(s);
+    return TrimLeft(TrimRight(result, chars), chars);
+}
 
-    for (const char& c : chars) TrimR(TrimL(result, chars[c]), chars[c]);
-
-    return result;
+inline std::string& TrimStr(std::string& s, const std::string& chars = " \t\n\r")
+{
+    return TrimLeft(TrimRight(s, chars), chars);
 }
 
 inline std::string& StrToUpper(std::string& str)
@@ -356,10 +381,10 @@ inline std::string RandomDigits(const int len)
     std::string result;
     result.reserve(len);
 
-    result = digits1[rand() % (digits1.length() - 1)];
+    result = digits1[rand() % digits1.length()];
 
     for (int i=1; i < len; ++i)
-        result += digitsN[rand() % (digitsN.length() - 1)];
+        result += digitsN[rand() % digitsN.length()];
 
     return result;
 }

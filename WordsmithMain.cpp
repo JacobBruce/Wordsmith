@@ -4,7 +4,7 @@
  * Author:    Bitfreak Software (contact@bitfreak.info)
  * Created:   2026-02-26
  * Copyright: Bitfreak Software (www.bitfreak.info)
- * License:
+ * License:   CC BY-NC-SA 4.0
  **************************************************************/
 
 #include "WordsmithMain.h"
@@ -145,6 +145,7 @@ wsTextCtrl::wsTextCtrl(wxWindow* parent,
         m_FileName(_("New File")),
         m_IsModified(false),
         m_IsIndicated(false),
+        m_IsPopupMenuShown(false),
         m_HasCustomFont(false)
 {
     SetEOLMode(GLOBALS::LineEndMode);
@@ -185,11 +186,46 @@ wsTextCtrl::wsTextCtrl(wxWindow* parent,
     SetFocus();
 }
 
-const bool wsTextCtrl::IsChanged() const
+bool wsTextCtrl::IsChanged() const
 { return m_IsModified; }
 
 void wsTextCtrl::SetChanged(bool changed)
 { m_IsModified = changed; }
+
+bool wsTextCtrl::IsFileModified() const
+{
+    if (m_FilePath.empty()) return false;
+
+    return m_FileModTime != FileModTime(m_FilePath.utf8_string());
+}
+
+void wsTextCtrl::UpdateFileModState()
+{
+    std::string filePath(m_FilePath.utf8_string());
+
+    if (FileExists(filePath)) {
+        m_FileModTime = FileModTime(filePath);
+    } else {
+        m_FileModTime = std::filesystem::file_time_type{std::filesystem::file_time_type::duration::zero()};
+    }
+}
+
+void wsTextCtrl::ReloadFile()
+{
+    if (FileExists(m_FilePath.utf8_string())) {
+        LoadFile(m_FilePath);
+        SetChanged(false);
+        UpdateFileModState();
+    }
+}
+
+void wsTextCtrl::ResetFile()
+{
+    m_FilePath.clear();
+    m_FileName = _("New File");
+    SetChanged(true);
+    UpdateFileModState();
+}
 
 void wsTextCtrl::SetFilePath(const wxString& file_path)
 { m_FilePath = file_path; }
@@ -203,13 +239,31 @@ void wsTextCtrl::SetFileName(const wxString& file_name)
 const wxString& wsTextCtrl::GetFileName() const
 { return m_FileName; }
 
-const bool wsTextCtrl::IsIndicated() const
+bool wsTextCtrl::IsIndicated() const
 { return m_IsIndicated; }
 
 void wsTextCtrl::SetIndicated(bool indicated)
 { m_IsIndicated = indicated; }
 
-const bool wsTextCtrl::HasCustomFont() const
+bool wsTextCtrl::IsPopupMenuShown() const
+{ return m_IsPopupMenuShown; }
+
+void wsTextCtrl::ShowPopupMenu(wxMenu* popup_menu, const wxPoint& pos)
+{
+    if (CallTipActive())
+        CallTipCancel();
+
+    m_IsPopupMenuShown = true;
+
+    if (pos == wxDefaultPosition)
+        PopupMenu(popup_menu);
+    else
+        PopupMenu(popup_menu, pos.x, pos.y);
+
+    m_IsPopupMenuShown = false;
+}
+
+bool wsTextCtrl::HasCustomFont() const
 { return m_HasCustomFont; }
 
 void wsTextCtrl::SetCustomFont(const wxFont& font)
@@ -257,7 +311,7 @@ wxString wsTextShowDialog::GetValue() const
 { return textCtrl->GetValue(); }
 
 void wsTextShowDialog::SetValue(const wxString& value)
-{ return textCtrl->SetValue(value); }
+{ textCtrl->SetValue(value); }
 
 /// START wsSettingsDialog
 
@@ -407,7 +461,8 @@ void wsSettingsDialog::ApplySettings(bool init)
 
     for (size_t i=0; i < parent->AuiNotebook1->GetPageCount(); ++i)
     {
-        wsTextCtrl* stc((wsTextCtrl*)parent->AuiNotebook1->GetPage(i)->GetChildren().GetFirst()->GetData());
+        wsTextCtrl* stc = parent->GetTextCtrlForPage(parent->AuiNotebook1->GetPage(i));
+        if (!stc) continue;
 
         stc->SetEOLMode(GLOBALS::LineEndMode);
 
@@ -419,7 +474,7 @@ void wsSettingsDialog::ApplySettings(bool init)
         }
     }
 
-    if (!init) SaveConfigFile(GLOBALS::UserDataDir + u8"./settings.cfg", GLOBALS::Settings);
+    if (!init) SaveConfigFile(GLOBALS::UserDataDir + "/settings.cfg", GLOBALS::Settings);
 }
 
 void wsSettingsDialog::FontButtonClick(wxCommandEvent& event)
@@ -498,7 +553,7 @@ wsWordsDialog::wsWordsDialog(wxWindow* parent, const wxString& caption, const wx
 
     SetSizerAndFit(sizer);
 
-    LoadWords(GLOBALS::UserDataDir + u8"/custom_words.txt");
+    LoadWords(GLOBALS::UserDataDir + "/custom_words.txt");
 }
 
 void wsWordsDialog::Reset()
@@ -506,15 +561,23 @@ void wsWordsDialog::Reset()
     UpdateLists(false);
 }
 
-void wsWordsDialog::LoadWords(std::u8string file_path)
+void wsWordsDialog::LoadWords(std::string file_path)
 {
     std::string err;
     if (!FileExists(file_path)) return;
     auto lines = ReadFileLines(file_path, err);
 
-    if (!err.empty()) return;
+    if (!err.empty() || lines.empty()) return;
 
-    int wordCnt = stoi(lines[0]);
+    int wordCnt = 0;
+    try {
+        wordCnt = stoi(lines[0]);
+    } catch (...) {
+        return;
+    }
+
+    if (wordCnt <= 0 || static_cast<size_t>(wordCnt) + 1 > lines.size())
+        return;
 
     for (int i=1; i <= wordCnt; ++i)
         if (!lines[i].empty()) GLOBALS::UserWords.emplace(lines[i]);
@@ -535,7 +598,7 @@ void wsWordsDialog::SaveWords()
     for (const std::string& word : GLOBALS::SkipWords)
         wordsStr += word + "\n";
 
-    WriteFileStr(GLOBALS::UserDataDir + u8"/custom_words.txt", wordsStr);
+    WriteFileStr(GLOBALS::UserDataDir + "/custom_words.txt", wordsStr);
 
     static_cast<WordsmithFrame*>(GetParent())->spellTimer.Start(1, true);
 }
@@ -655,7 +718,7 @@ wsPhrasesDialog::wsPhrasesDialog(wxWindow* parent, const wxString& caption, cons
 
     SetSizerAndFit(sizer);
 
-    LoadPhrases(GLOBALS::UserDataDir + u8"/custom_phrases.txt");
+    LoadPhrases(GLOBALS::UserDataDir + "/custom_phrases.txt");
 }
 
 void wsPhrasesDialog::Reset()
@@ -663,7 +726,7 @@ void wsPhrasesDialog::Reset()
     UpdateList(false);
 }
 
-void wsPhrasesDialog::LoadPhrases(std::u8string file_path)
+void wsPhrasesDialog::LoadPhrases(std::string file_path)
 {
     std::string err;
     if (!FileExists(file_path)) return;
@@ -684,7 +747,7 @@ void wsPhrasesDialog::SavePhrases()
     for (const std::string& phrase : GLOBALS::UserPhrases)
         phraseStr += phrase + "\n";
 
-    WriteFileStr(GLOBALS::UserDataDir + u8"/custom_phrases.txt", phraseStr);
+    WriteFileStr(GLOBALS::UserDataDir + "/custom_phrases.txt", phraseStr);
 }
 
 void wsPhrasesDialog::SaveButtonClick(wxCommandEvent& event)
@@ -995,12 +1058,11 @@ void wsAboutDialog::OnStateChange(wxWebRequestEvent& event)
                 if (appVer == APP_VER) {
                     wxMessageBox(_("Wordsmith is up to date."));
                 } else {
-                    wxMessageDialog* updateDialog = new wxMessageDialog(this, wxEmptyString, _("Update Available"), wxYES_NO|wxICON_QUESTION);
-                    updateDialog->SetMessage(_("There is a new version of Wordsmith available. Do you want to visit the releases page?"));
-                    int answer = updateDialog->ShowModal();
+                    wxMessageDialog updateDialog(this, _("There is a new version of Wordsmith available. Do you want to visit the releases page?"), _("Update Available"), wxYES_NO|wxICON_QUESTION);
+                    const int answer = updateDialog.ShowModal();
 
-                    if (answer == wxID_CANCEL) return;
-                    if (answer == wxID_YES) wxLaunchDefaultBrowser("https://github.com/JacobBruce/Wordsmith/releases");
+                    if (answer == wxID_YES)
+                        wxLaunchDefaultBrowser("https://github.com/JacobBruce/Wordsmith/releases");
                 }
             } else {
                 checkBtn->SetLabel(_("Error Occurred"));
@@ -1102,9 +1164,9 @@ HTMLFrame::HTMLFrame() :
     std::string errStr;
 
     if (wxSystemSettings::GetAppearance().IsDark()) {
-        cssStr = ReadFileStr(u8"./css/md_dark.css", errStr);
+        cssStr = ReadFileStr("./css/md_dark.css", errStr);
     } else {
-        cssStr = ReadFileStr(u8"./css/md_light.css", errStr);
+        cssStr = ReadFileStr("./css/md_light.css", errStr);
     }
 
     if (!errStr.empty()) wxMessageBox(errStr, _("Error"), wxOK|wxICON_ERROR|wxCENTER);
@@ -1135,7 +1197,7 @@ void HTMLFrame::ReloadPage()
 {
     if (viewMode == 0) {
         std::string errStr;
-        std::u8string fpu8((const char8_t*)filePath.utf8_string().c_str());
+        std::string fpu8(filePath.utf8_string());
         std::string fileDir(ParentPath(fpu8) + "/");
         std::string textStr(ReadFileStr(fpu8, errStr));
 
@@ -1144,7 +1206,7 @@ void HTMLFrame::ReloadPage()
                                 "'><style>" + cssStr + "</style></head><body>" + MDtoHTML(textStr) + "</body></html>";
 
             wxString tmpFile = wxStandardPaths::Get().GetTempDir() + "/temp_wordsmith_doc.md.html";
-            errStr = WriteFileStr((const char8_t*)tmpFile.utf8_string().c_str(), htmlStr);
+            errStr = WriteFileStr(tmpFile.utf8_string(), htmlStr);
 
             if (errStr.empty())
                 webView->LoadURL("file:///" + tmpFile);
@@ -1201,6 +1263,18 @@ void HTMLFrame::LoadFile(const wxString& file_path)
 
 /// START WordsmithFrame
 
+wsTextCtrl* WordsmithFrame::GetTextCtrlForPage(wxWindow* page) const
+{
+    if (!page) return nullptr;
+
+    for (wxWindow* child : page->GetChildren()) {
+        if (auto* stc = wxDynamicCast(child, wsTextCtrl))
+            return stc;
+    }
+
+    return nullptr;
+}
+
 WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     spellChecker(std::make_unique<yams::symspell::MemoryStore>(), 2, 7),
     findDialog(nullptr),
@@ -1222,6 +1296,8 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     }
     AuiManager1 = new wxAuiManager(this, wxAUI_MGR_DEFAULT);
     AuiNotebook1 = new wxAuiNotebook(this, ID_AUINOTEBOOK1, wxDefaultPosition, wxDefaultSize, wxAUI_NB_DEFAULT_STYLE|wxBORDER_NONE);
+    AuiManager1->AddPane(AuiNotebook1, wxAuiPaneInfo().Name(_T("WS_PANE")).DefaultPane().CaptionVisible(false).CloseButton(false).Center().Floatable(false).PaneBorder(false));
+    AuiManager1->Update();
     MenuBar1 = new wxMenuBar();
     FileMenu = new wxMenu();
     NewMenuItem = new wxMenuItem(FileMenu, ID_MENUITEM2, _("New\tCtrl-N"), _("Create new file"), wxITEM_NORMAL);
@@ -1459,6 +1535,7 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     Connect(dict_btn, wxEVT_COMMAND_TOOL_CLICKED, (wxObjectEventFunction)&WordsmithFrame::OnDictionaryClick);
     Connect(tips_btn, wxEVT_COMMAND_TOOL_CLICKED, (wxObjectEventFunction)&WordsmithFrame::OnTipsClick);
     Connect(wxID_ANY, wxEVT_CLOSE_WINDOW, (wxObjectEventFunction)&WordsmithFrame::OnClose);
+    Connect(wxID_ANY, wxEVT_ACTIVATE, (wxObjectEventFunction)&WordsmithFrame::OnActivate);
     //*)
 
     SetClientSize(wxSize(stoi(GLOBALS::Settings["WIN_WIDTH"]), stoi(GLOBALS::Settings["WIN_HEIGHT"])));
@@ -1515,7 +1592,7 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
     AuiNotebook1->SetArtProvider(new wxAuiDefaultTabArt());
 
     std::string errStr, selFile;
-    std::u8string oflFile = GLOBALS::UserDataDir + u8"/open_files_list.ws";
+    std::string oflFile = GLOBALS::UserDataDir + "/open_files_list.ws";
     std::string tabFiles = FileExists(oflFile) ? ReadFileStr(oflFile, errStr) : "";
 
     if (errStr.empty() && !tabFiles.empty()) {
@@ -1529,10 +1606,10 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
             if (settings.size() != 5) continue;
             if (settings[4] == "1") selFile = settings[0];
 
-            if (FileExists((const char8_t*)settings[0].c_str())) {
+            if (FileExists(settings[0])) {
 
                 NewPadTab(stoi(settings[2]), stoi(settings[3]));
-                LoadDocument(wxString::FromUTF8(settings[0]), wxString::FromUTF8(FileName((const char8_t*)settings[0].c_str())));
+                LoadDocument(wxString::FromUTF8(settings[0]), wxString::FromUTF8(FileName(settings[0])));
 
                 if (settings[1] != "default") {
                     std::vector<std::string> fontData(ExplodeStr(settings[1], "|"));
@@ -1575,31 +1652,32 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
         }
 
         if (!errStr.empty()) {
-            ErrorDialog1->SetMessage(errStr);
-            ErrorDialog1->ShowModal();
+            this->CallAfter([this, errStr]() {
+                ErrorDialog1->SetMessage(errStr);
+                ErrorDialog1->ShowModal();
+            });
             return;
         }
+
+        WordParser::BuildExtraVec(GLOBALS::WordMap, GLOBALS::WordSyn, GLOBALS::ExtraVec);
+        WordParser::GenIndexMap(GLOBALS::ExtraVec, GLOBALS::ExtraIndices);
+        WordParser::GenIndexMap(GLOBALS::WordVec, GLOBALS::WordIndices);
 
         for (const auto& entry : GLOBALS::WordVec)
             spellChecker.createDictionaryEntry(entry.first, entry.second);
 
+        for (const auto& entry : GLOBALS::ExtraVec)
+            spellChecker.createDictionaryEntry(entry.first, 1);
+
         for (const auto& entry : GLOBALS::WordSyn)
-        {
             dictDialog->AddWordToAC(entry.first);
 
-            if (entry.first.find(' ') == std::string::npos && !GLOBALS::WordMap.contains(entry.first))
-                spellChecker.createDictionaryEntry(entry.first, 1);
-        }
-
-        WordParser::GenDictMap(GLOBALS::WordVec, GLOBALS::WebIndices);
         GLOBALS::GotWordData = true;
     };
 
     StatusBar1->SetStatusText(_("Loading word files ..."), 0);
 
-    GLOBALS::LoadThread = new std::thread(loadFunc);
-
-    GLOBALS::LoadThread->detach();
+    wordLoadThread = std::thread(loadFunc);
 
     initTimer.Start(500, true);
 
@@ -1608,6 +1686,17 @@ WordsmithFrame::WordsmithFrame(wxWindow* parent,wxWindowID id) :
 
 WordsmithFrame::~WordsmithFrame()
 {
+    if (wordLoadThread.joinable())
+        wordLoadThread.join();
+
+    if (wxAppConsole* app = wxApp::GetInstance())
+        app->ProcessPendingEvents();
+
+    if (findDialog) {
+        findDialog->Destroy();
+        findDialog = nullptr;
+    }
+
     //(*Destroy(WordsmithFrame)
     FileOpenDialog1->Destroy();
     FileSaveDialog1->Destroy();
@@ -1694,12 +1783,13 @@ void WordsmithFrame::ShowOpenDialog()
     }
 
     try {
-        const std::uintmax_t fileSize = FileSize((const char8_t*)filePath.utf8_string().c_str());
+        const std::uintmax_t fileSize = FileSize(filePath.utf8_string());
         const wxString fileName(FileOpenDialog1->GetFilename());
 
         if (fileSize > INT_MAX) {
             ErrorDialog1->SetMessage(_("The file cannot be loaded because it is too large."));
             ErrorDialog1->ShowModal();
+            return;
         }
 
         LoadDocument(filePath, fileName);
@@ -1725,8 +1815,7 @@ void WordsmithFrame::ShowSaveDialog(bool force_show)
             GLOBALS::TabPageSTC->SetFileName(FileSaveDialog1->GetFilename());
         }
 
-        if (GLOBALS::TabPageSTC->SaveFile(GLOBALS::TabPageSTC->GetFilePath())) {
-            GLOBALS::TabPageSTC->SetChanged(false);
+        if (SaveDocument(GLOBALS::TabPageSTC)) {
             AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), GLOBALS::TabPageSTC->GetFileName());
             if (docViewer->IsShown())
                 docViewer->LoadFile(GLOBALS::TabPageSTC->GetFilePath());
@@ -1791,7 +1880,8 @@ bool WordsmithFrame::SelectTabPage(const wxString& file_name)
 {
     for (size_t i=0; i < AuiNotebook1->GetPageCount(); ++i)
     {
-        wsTextCtrl* stc((wsTextCtrl*)AuiNotebook1->GetPage(i)->GetChildren().GetFirst()->GetData());
+        wsTextCtrl* stc = GetTextCtrlForPage(AuiNotebook1->GetPage(i));
+        if (!stc) continue;
 
         if (file_name == stc->GetFilePath()) {
             AuiNotebook1->SetSelection(i);
@@ -1809,7 +1899,59 @@ void WordsmithFrame::LoadDocument(const wxString& file_path, const wxString& fil
     GLOBALS::TabPageSTC->SetFileName(file_name);
     GLOBALS::TabPageSTC->SetFilePath(file_path);
     GLOBALS::TabPageSTC->SetChanged(false);
+    GLOBALS::TabPageSTC->UpdateFileModState();
     AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), file_name);
+}
+
+bool WordsmithFrame::SaveDocument(wsTextCtrl* stc)
+{
+    if (stc->SaveFile(stc->GetFilePath())) {
+        stc->SetChanged(false);
+        stc->UpdateFileModState();
+        return true;
+    }
+
+    return false;
+}
+
+void WordsmithFrame::CheckFileState()
+{
+    if (toolsTimer.IsRunning()) return;
+
+    if (GLOBALS::TabPageSTC == nullptr) return;
+
+    if (!GLOBALS::TabPageSTC->GetFilePath().empty()) {
+
+        std::string filePath(GLOBALS::TabPageSTC->GetFilePath().utf8_string());
+
+        if (!FileExists(filePath)) {
+
+            QuestionDialog1->SetMessage(_("The document has been deleted or moved. Do you want to recreate it?"));
+            int answer = QuestionDialog1->ShowModal();
+
+            if (answer == wxID_YES) {
+                ShowSaveDialog(false);
+            } else {
+                GLOBALS::TabPageSTC->ResetFile();
+                AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), "*" + GLOBALS::TabPageSTC->GetFileName());
+            }
+
+        } else if (GLOBALS::TabPageSTC->IsFileModified()) {
+
+            QuestionDialog1->SetMessage(_("The document has been modified outside of Wordsmith. Reload the file from disk?"));
+            int answer = QuestionDialog1->ShowModal();
+
+            if (answer == wxID_YES) {
+                GLOBALS::TabPageSTC->ReloadFile();
+                AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), GLOBALS::TabPageSTC->GetFileName());
+            } else {
+                GLOBALS::TabPageSTC->SetChanged(true);
+                AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), "*" + GLOBALS::TabPageSTC->GetFileName());
+            }
+        }
+
+        toolsTimer.Start(10, true);
+    }
 }
 
 void WordsmithFrame::BindTextCtrl(wsTextCtrl* stc)
@@ -1818,9 +1960,9 @@ void WordsmithFrame::BindTextCtrl(wsTextCtrl* stc)
     stc->Bind(wxEVT_STC_MODIFIED, &WordsmithFrame::OnTextChanged, this);
     stc->Bind(wxEVT_STC_DWELLSTART, &WordsmithFrame::OnMouseHover, this);
     stc->Bind(wxEVT_STC_DWELLEND, &WordsmithFrame::OnMouseHoverEnd, this);
-    stc->Bind(wxEVT_LEFT_UP, &WordsmithFrame::OnMouseUp, this);
-    stc->Bind(wxEVT_RIGHT_UP, &WordsmithFrame::OnMouseUp, this);
+    stc->Bind(wxEVT_LEFT_UP, &WordsmithFrame::OnMouseLeftUp, this);
     stc->Bind(wxEVT_RIGHT_DOWN, &WordsmithFrame::OnMouseRightDown, this);
+    stc->Bind(wxEVT_RIGHT_UP, &WordsmithFrame::OnMouseRightUp, this);
     stc->Bind(wxEVT_CHAR, &WordsmithFrame::OnKeyPress, this);
     stc->Bind(wxEVT_KEY_UP, &WordsmithFrame::OnKeyUp, this);
     stc->Bind(wxEVT_CONTEXT_MENU, &WordsmithFrame::OnContextMenu, this);
@@ -1841,7 +1983,6 @@ void WordsmithFrame::NewPadTab(int wrap, int zoom)
     NewPanel->SetSizer(BoxSizer1);
 
     AuiNotebook1->AddPage(NewPanel, _("New File"), true);
-    AuiManager1->AddPane(AuiNotebook1, wxAuiPaneInfo().Name(_T("WS_PANE"+TabIDS)).DefaultPane().CaptionVisible(false).CloseButton(false).Center().Floatable(false).PaneBorder(false));
     AuiManager1->Update();
 
     newTextCtrl->SetWrapMode(wrap);
@@ -1887,7 +2028,7 @@ bool WordsmithFrame::LoadWebViewer(bool show_msg)
 {
     if (GLOBALS::TabPageSTC != nullptr) {
 
-        if (FileExists((const char8_t*)GLOBALS::TabPageSTC->GetFilePath().utf8_string().c_str())) {
+        if (FileExists(GLOBALS::TabPageSTC->GetFilePath().utf8_string())) {
             docViewer->LoadFile(GLOBALS::TabPageSTC->GetFilePath());
             return true;
         } else if (show_msg) {
@@ -2278,12 +2419,18 @@ void WordsmithFrame::OnAutoCompleted(wxStyledTextEvent& event)
 
 void WordsmithFrame::OnTextChanged(wxStyledTextEvent& event)
 {
-    //wxBitmap TabImage_BMP(wxImage(_T("./icons/edit_icon.png")));
-    //AuiNotebook1->SetPageBitmap(AuiNotebook1->GetSelection(), *TabImage_BMP);
+    wsTextCtrl* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl);
+    if (!stc) {
+        event.Skip();
+        return;
+    }
 
-    if (!GLOBALS::TabPageSTC->IsChanged()) {
-        GLOBALS::TabPageSTC->SetChanged();
-        AuiNotebook1->SetPageText(AuiNotebook1->GetSelection(), "*" + GLOBALS::TabPageSTC->GetFileName());
+    wxWindow* panel = stc->GetParent();
+    const int pageIdx = panel ? AuiNotebook1->GetPageIndex(panel) : wxNOT_FOUND;
+
+    if (!stc->IsChanged() && pageIdx != wxNOT_FOUND) {
+        stc->SetChanged();
+        AuiNotebook1->SetPageText(pageIdx, "*" + stc->GetFileName());
     }
 
     if (!spellTimer.IsRunning())
@@ -2300,22 +2447,27 @@ void WordsmithFrame::OnTextChanged(wxStyledTextEvent& event)
 
 void WordsmithFrame::OnMouseHover(wxStyledTextEvent& event)
 {
+    wsTextCtrl* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl);
+    if (!stc) return;
+
     #if defined(__WXMSW__)
-    if (GLOBALS::TabPageSTC == nullptr || !GLOBALS::TabPageSTC->HasFocus() || !GLOBALS::TabPageSTC->IsMouseInWindow()) return;
+    if (!stc->HasFocus() || !stc->IsMouseInWindow()) return;
     #else
-    if (GLOBALS::TabPageSTC == nullptr || !IsMouseInWindow(GLOBALS::TabPageSTC)) return;
+    if (!IsMouseInWindow(stc)) return;
     #endif
 
-    int pos = GLOBALS::TabPageSTC->PositionFromPoint(wxPoint(event.GetX(), event.GetY()));
+    if (stc->IsPopupMenuShown()) return;
 
-    if (pos != wxSTC_INVALID_POSITION && pos != GLOBALS::TabPageSTC->GetTextLength()) {
+    int pos = stc->PositionFromPoint(wxPoint(event.GetX(), event.GetY()));
 
-        int wordStart = GLOBALS::TabPageSTC->WordStartPosition(pos,true);
-        int wordEnd = GLOBALS::TabPageSTC->WordEndPosition(pos,true);
+    if (pos != wxSTC_INVALID_POSITION && pos != stc->GetTextLength()) {
+
+        int wordStart = stc->WordStartPosition(pos,true);
+        int wordEnd = stc->WordEndPosition(pos,true);
 
         if (wordStart == wordEnd || wordStart == wxSTC_INVALID_POSITION || wordEnd == wxSTC_INVALID_POSITION) return;
 
-        wxString hovWord(GLOBALS::TabPageSTC->GetTextRange(wordStart, wordEnd));
+        wxString hovWord(stc->GetTextRange(wordStart, wordEnd));
         std::string word(hovWord.utf8_string());
 
         if (!GLOBALS::WordSyn.contains(word))
@@ -2362,7 +2514,7 @@ void WordsmithFrame::OnMouseHover(wxStyledTextEvent& event)
             }
 
             tooltipStr.resize(tooltipStr.length()-1);
-            GLOBALS::TabPageSTC->CallTipShow(pos, wxString::FromUTF8(tooltipStr));
+            stc->CallTipShow(pos, wxString::FromUTF8(tooltipStr));
         }
     }
 
@@ -2371,10 +2523,11 @@ void WordsmithFrame::OnMouseHover(wxStyledTextEvent& event)
 
 void WordsmithFrame::OnMouseHoverEnd(wxStyledTextEvent& event)
 {
-    if (GLOBALS::TabPageSTC == nullptr) return;
+    wsTextCtrl* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl);
+    if (!stc) return;
 
-    if (GLOBALS::TabPageSTC->CallTipActive())
-        GLOBALS::TabPageSTC->CallTipCancel();
+    if (stc->CallTipActive())
+        stc->CallTipCancel();
 
     event.Skip();
 }
@@ -2383,11 +2536,12 @@ void WordsmithFrame::OnTabPageChanged(wxAuiNotebookEvent& event)
 {
     if (AuiNotebook1->GetPageCount() > 0) {
 
-        GLOBALS::TabPageSTC = (wsTextCtrl*)AuiNotebook1->GetCurrentPage()->GetChildren().GetFirst()->GetData();
+        GLOBALS::TabPageSTC = GetTextCtrlForPage(AuiNotebook1->GetCurrentPage());
 
         if (docViewer->IsShown()) LoadWebViewer(false);
         if (!spellTimer.IsRunning()) spellTimer.Start(1, true);
 
+        CheckFileState();
         UpdateStatusBar();
 
     } else {
@@ -2407,13 +2561,35 @@ void WordsmithFrame::OnTabPageChanged(wxAuiNotebookEvent& event)
 
 void WordsmithFrame::OnTabPageClose(wxAuiNotebookEvent& event)
 {
-    if (GLOBALS::TabPageSTC->IsChanged() && (!GLOBALS::TabPageSTC->GetFilePath().empty() || GLOBALS::TabPageSTC->GetLength() > 0)) {
+    const int page = event.GetSelection();
+    if (page == wxNOT_FOUND) {
+        event.Skip();
+        return;
+    }
+
+    wsTextCtrl* stc = GetTextCtrlForPage(AuiNotebook1->GetPage(page));
+    if (!stc) {
+        event.Skip();
+        return;
+    }
+
+    if (stc->IsChanged() && (!stc->GetFilePath().empty() || stc->GetLength() > 0)) {
+
+        if (AuiNotebook1->GetSelection() != page)
+            AuiNotebook1->SetSelection(page);
+
+        GLOBALS::TabPageSTC = stc;
 
         QuestionDialog1->SetMessage(_("Do you want to save the document before closing it?"));
-        int answer = QuestionDialog1->ShowModal();
+        const int answer = QuestionDialog1->ShowModal();
 
-        if (answer == wxID_CANCEL) return;
-        if (answer == wxID_YES) ShowSaveDialog();
+        if (answer == wxID_CANCEL) {
+            event.Veto();
+            return;
+        }
+
+        if (answer == wxID_YES)
+            ShowSaveDialog(stc->GetFilePath().empty());
     }
 
     event.Skip();
@@ -2608,7 +2784,7 @@ void WordsmithFrame::OnACKeyTimerTrigger(wxTimerEvent& event)
 
         stc.AutoCompShow(preChars.length(), wxString::FromUTF8(TrimLast(ss.str(), '\n')));
 
-    } else if (matchWords.size() > 4) {
+    } else if (matchWords.size() > 0) {
 
         std::stringstream ss;
 
@@ -2624,13 +2800,28 @@ void WordsmithFrame::OnACKeyTimerTrigger(wxTimerEvent& event)
         autoWords.clear();
         autoPhrases.clear();
 
-        if (GLOBALS::WebIndices.contains(subWord)) {
+        if (GLOBALS::WordIndices.contains(subWord)) {
 
-            wordIndex = GLOBALS::WebIndices[subWord];
-
-            for (; wordIndex < GLOBALS::WordVec.size(); ++wordIndex)
+            for (wordIndex = GLOBALS::WordIndices[subWord]; wordIndex < GLOBALS::WordVec.size(); ++wordIndex)
             {
                 const auto& entry(GLOBALS::WordVec[wordIndex]);
+
+                if (!entry.first.starts_with(subWord)) break;
+
+                if (entry.first.length() <= preChars.length() || !entry.first.starts_with(preWord)) continue;
+
+                if (!GLOBALS::SkipWords.contains(entry.first))
+                    autoWords.emplace(std::make_pair(entry.second, entry.first));
+            }
+        }
+
+        if (GLOBALS::ExtraIndices.contains(subWord)) {
+
+            for (wordIndex = GLOBALS::ExtraIndices[subWord]; wordIndex < GLOBALS::ExtraVec.size(); ++wordIndex)
+            {
+                const auto& entry(GLOBALS::ExtraVec[wordIndex]);
+
+                if (!entry.first.starts_with(subWord)) break;
 
                 if (entry.first.length() <= preChars.length() || !entry.first.starts_with(preWord)) continue;
 
@@ -2736,7 +2927,7 @@ void WordsmithFrame::OnKeyUp(wxKeyEvent& event)
     event.Skip();
 }
 
-void WordsmithFrame::OnMouseUp(wxMouseEvent& event)
+void WordsmithFrame::OnMouseLeftUp(wxMouseEvent& event)
 {
     if (!statsTimer.IsRunning())
         statsTimer.Start(10, true);
@@ -2749,7 +2940,26 @@ void WordsmithFrame::OnMouseUp(wxMouseEvent& event)
 
 void WordsmithFrame::OnMouseRightDown(wxMouseEvent& event)
 {
-    if (GLOBALS::TabPageSTC->GetSelectionEmpty()) event.Skip();
+    if (auto* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl)) {
+        if (stc->CallTipActive())
+            stc->CallTipCancel();
+    }
+
+    event.Skip();
+}
+
+void WordsmithFrame::OnMouseRightUp(wxMouseEvent& event)
+{
+    if (!statsTimer.IsRunning())
+        statsTimer.Start(10, true);
+
+    if (!toolsTimer.IsRunning())
+        toolsTimer.Start(10, true);
+
+    if (auto* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl))
+        ShowEditorContextMenu(*stc, event.GetPosition());
+
+    event.Skip();
 }
 
 void WordsmithFrame::OnInitTimerTrigger(wxTimerEvent& event)
@@ -3063,8 +3273,10 @@ void WordsmithFrame::OnAddPhrase(wxCommandEvent& event)
     event.Skip();
 }
 
-void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
+void WordsmithFrame::ShowEditorContextMenu(wsTextCtrl& stc, const wxPoint& clientPos)
 {
+    GLOBALS::TabPageSTC = &stc;
+
     static phmap::flat_hash_set<std::string> comWords = {
         "which", "whose", "while", "where", "those", "should", "would", "could", "else", "like", "some", "been", "will", "your", "there", "their", "them", "they",
         "said", "very", "with", "what", "when", "have", "were", "went", "well", "much", "this", "that", "then", "than", "and", "the", "but", "can", "not", "one", "out",
@@ -3073,9 +3285,6 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
         "shouldn't", "wouldn't", "couldn't", "wasn't", "didn't", "you're", "don't", "can't", "that's", "it's", "he'd", "she'd", "i'll", "i'm", "i'd"
     };
 
-    if (GLOBALS::TabPageSTC == nullptr) return;
-
-    wsTextCtrl& stc(*GLOBALS::TabPageSTC);
     std::string selWord, lowWord, synWord, simWord;
     wxString selText;
     wxMenu menu;
@@ -3106,9 +3315,9 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             goto SETUP_MENU;
         } else if (HasWhiteSpace(selText)) {
 
-            auto menuID = wxNewId();
+            const int menuID = wxNewId();
             menu.Append(menuID, _("Add selection to phrases"));
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnAddPhrase);
+            menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnAddPhrase, this, menuID);
 
             GLOBALS::LastPhrase = selText;
             addSep = true;
@@ -3130,10 +3339,10 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             menuText.Replace("%s", wxString::FromUTF8(lowWord), false);
 
             addSep = true;
-            auto menuID = wxNewId();
+            const int menuID = wxNewId();
 
             menu.Append(menuID, menuText);
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnRemoveWord);
+            menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnRemoveWord, this, menuID);
 
         } else {
 
@@ -3141,10 +3350,10 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
             menuText.Replace("%s", wxString::FromUTF8(lowWord), false);
 
             addSep = true;
-            auto menuID = wxNewId();
+            const int menuID = wxNewId();
 
             menu.Append(menuID, menuText);
-            Connect(menuID, wxEVT_COMMAND_MENU_SELECTED, (wxObjectEventFunction)&WordsmithFrame::OnAddWord);
+            menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnAddWord, this, menuID);
 
             auto suggestions = spellChecker.lookup(lowWord, yams::symspell::Verbosity::Closest);
 
@@ -3277,7 +3486,22 @@ void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
     menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnDeleteClick, this, wxID_DELETE);
     menu.Bind(wxEVT_COMMAND_MENU_SELECTED, &WordsmithFrame::OnSelectAllClick, this, wxID_SELECTALL);
 
-    stc.PopupMenu(&menu);
+    stc.ShowPopupMenu(&menu, clientPos);
+}
+
+void WordsmithFrame::OnContextMenu(wxContextMenuEvent& event)
+{
+    wsTextCtrl* stc = wxDynamicCast(event.GetEventObject(), wsTextCtrl);
+    if (!stc)
+        stc = GLOBALS::TabPageSTC;
+    if (!stc)
+        return;
+
+    wxPoint pos = event.GetPosition();
+    if (pos != wxDefaultPosition)
+        pos = stc->ScreenToClient(pos);
+
+    ShowEditorContextMenu(*stc, pos);
     event.Skip();
 }
 
@@ -3447,6 +3671,14 @@ void WordsmithFrame::OnTabLoseFocus(wxFocusEvent& event)
     event.Skip();
 }
 
+void WordsmithFrame::OnActivate(wxActivateEvent& event)
+{
+    if (event.GetActive())
+        CheckFileState();
+
+    event.Skip();
+}
+
 void WordsmithFrame::OnQuit(wxCommandEvent& event)
 {
     Close(true);
@@ -3459,7 +3691,8 @@ void WordsmithFrame::OnClose(wxCloseEvent& event)
 
     for (size_t i=0; i < AuiNotebook1->GetPageCount(); ++i)
     {
-        wsTextCtrl* stc((wsTextCtrl*)AuiNotebook1->GetPage(i)->GetChildren().GetFirst()->GetData());
+        wsTextCtrl* stc = GetTextCtrlForPage(AuiNotebook1->GetPage(i));
+        if (!stc) continue;
 
         if (stc->IsChanged() && (!stc->GetFilePath().empty() || stc->GetLength() > 0)) unsaved = true;
 
@@ -3502,9 +3735,9 @@ void WordsmithFrame::OnClose(wxCloseEvent& event)
     GLOBALS::Settings["WIN_WIDTH"] = std::to_string(sz.GetWidth());
     GLOBALS::Settings["WIN_HEIGHT"] = std::to_string(sz.GetHeight());
 
-    SaveConfigFile(GLOBALS::UserDataDir + u8"/settings.cfg", GLOBALS::Settings);
+    SaveConfigFile(GLOBALS::UserDataDir + "/settings.cfg", GLOBALS::Settings);
 
-    WriteFileStr(GLOBALS::UserDataDir + u8"/open_files_list.ws", tabFiles.utf8_string());
+    WriteFileStr(GLOBALS::UserDataDir + "/open_files_list.ws", tabFiles.utf8_string());
 
     wxTheClipboard->Flush();
 

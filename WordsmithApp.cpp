@@ -4,7 +4,7 @@
  * Author:    Bitfreak Software (contact@bitfreak.info)
  * Created:   2026-02-26
  * Copyright: Bitfreak Software (www.bitfreak.info)
- * License:
+ * License:   CC BY-NC-SA 4.0
  **************************************************************/
 
 #include "WordsmithApp.h"
@@ -16,35 +16,62 @@
 
 IMPLEMENT_APP(WordsmithApp);
 
+inline bool EnsureUtf8Ctype()
+{
+    const char* cur = std::setlocale(LC_CTYPE, nullptr);
+
+    if (cur && (std::strstr(cur, "UTF-8") || std::strstr(cur, "utf8")))
+        return true;
+
+    return std::setlocale(LC_CTYPE, "en_US.UTF-8") != nullptr
+        || std::setlocale(LC_CTYPE, "C.UTF-8") != nullptr
+        || std::setlocale(LC_CTYPE, ".UTF-8") != nullptr;
+}
+
 bool WordsmithApp::OnInit()
 {
-    std::string exePath = wxStandardPaths::Get().GetExecutablePath().utf8_string();
-    std::string cwdPath = ParentPath((const char8_t*)exePath.data());
-    std::string dataDir = wxStandardPaths::Get().GetUserDataDir().utf8_string();
-    GLOBALS::UserDataDir = (const char8_t*)dataDir.data();
+    if (!EnsureUtf8Ctype()) {
+        wxMessageBox(_("Invalid C locale detected. Closing application."), _("Invalid Locale"), wxOK | wxCENTER | wxICON_ERROR);
+        return false;
+    }
+
+    std::string cwdPath = ParentPath(wxStandardPaths::Get().GetExecutablePath().utf8_string());
+    GLOBALS::UserDataDir = wxStandardPaths::Get().GetUserDataDir().utf8_string();
 
     if (!DirExists(GLOBALS::UserDataDir) && !CreateDir(GLOBALS::UserDataDir))
         wxMessageBox(_("Failed to create user data directory. Check permissions."), _("Permission Error"), wxOK | wxCENTER | wxICON_ERROR);
 
-    if (FileExists(GLOBALS::UserDataDir + u8"/settings.cfg")) {
-        LoadConfigFile(GLOBALS::UserDataDir + u8"/settings.cfg", GLOBALS::Settings);
-    } else if (FileExists(u8"./files/settings.cfg")) {
+    if (FileExists(GLOBALS::UserDataDir + "/settings.cfg")) {
+        LoadConfigFile(GLOBALS::UserDataDir + "/settings.cfg", GLOBALS::Settings);
+    } else if (FileExists("./files/settings.cfg")) {
         GLOBALS::Settings["CWD"] = cwdPath + "/files";
-        LoadConfigFile(u8"./files/settings.cfg", GLOBALS::Settings);
-    } else {
-        GLOBALS::Settings["CWD"] = cwdPath;
-        GLOBALS::Settings["THEME"] = "0";
-        GLOBALS::Settings["EOL"] = "0";
-        GLOBALS::Settings["AC"] = "1";
-        GLOBALS::Settings["TB"] = "1";
-        GLOBALS::Settings["SB"] = "1";
-        GLOBALS::Settings["FONT"] = "default";
-        GLOBALS::Settings["FONT_COLOR"] = "default";
-        GLOBALS::Settings["WIN_X"] = "default";
-        GLOBALS::Settings["WIN_Y"] = "default";
-        GLOBALS::Settings["WIN_WIDTH"] = "800";
-        GLOBALS::Settings["WIN_HEIGHT"] = "600";
+        LoadConfigFile("./files/settings.cfg", GLOBALS::Settings);
     }
+
+    if (!GLOBALS::Settings.contains("CWD"))
+        GLOBALS::Settings["CWD"] = cwdPath;
+    if (!GLOBALS::Settings.contains("THEME"))
+        GLOBALS::Settings["THEME"] = "0";
+    if (!GLOBALS::Settings.contains("EOL"))
+        GLOBALS::Settings["EOL"] = "0";
+    if (!GLOBALS::Settings.contains("AC"))
+        GLOBALS::Settings["AC"] = "1";
+    if (!GLOBALS::Settings.contains("TB"))
+        GLOBALS::Settings["TB"] = "1";
+    if (!GLOBALS::Settings.contains("SB"))
+        GLOBALS::Settings["SB"] = "1";
+    if (!GLOBALS::Settings.contains("FONT"))
+        GLOBALS::Settings["FONT"] = "default";
+    if (!GLOBALS::Settings.contains("FONT_COLOR"))
+        GLOBALS::Settings["FONT_COLOR"] = "default";
+    if (!GLOBALS::Settings.contains("WIN_X"))
+        GLOBALS::Settings["WIN_X"] = "default";
+    if (!GLOBALS::Settings.contains("WIN_Y"))
+        GLOBALS::Settings["WIN_Y"] = "default";
+    if (!GLOBALS::Settings.contains("WIN_WIDTH"))
+        GLOBALS::Settings["WIN_WIDTH"] = "800";
+    if (!GLOBALS::Settings.contains("WIN_HEIGHT"))
+        GLOBALS::Settings["WIN_HEIGHT"] = "600";
 
     if (GLOBALS::Settings["THEME"] == "0") {
         SetAppearance(wxApp::Appearance::System);
@@ -54,10 +81,10 @@ bool WordsmithApp::OnInit()
         SetAppearance(wxApp::Appearance::Light);
     }
 
-    std::u8string cwdU8 = (const char8_t*)GLOBALS::Settings["CWD"].data();
-    if (DirExists(cwdU8)) std::filesystem::current_path(cwdU8);
+    if (DirExists(GLOBALS::Settings["CWD"]))
+        std::filesystem::current_path(GLOBALS::Settings["CWD"]);
 
-    if (!FileExists(u8"./icons/app_icon.png")) {
+    if (!FileExists("./icons/app_icon.png")) {
 
         int answer = wxMessageBox(_("Unable to locate required app files. Are they already on your system?"), _("Missing Files"), wxYES_NO | wxCENTER | wxICON_ERROR);
 
@@ -71,23 +98,22 @@ bool WordsmithApp::OnInit()
             if (dir.EndsWith("/icons") || dir.EndsWith("\\icons"))
                 dir.RemoveLast(6);
 
-            std::string dirStr(dir.utf8_string());
-            const std::u8string& dirPath((const char8_t*)dirStr.data());
+            std::string dirPath(dir.utf8_string());
 
             if (DirExists(dirPath)) {
                 std::filesystem::current_path(dirPath);
-                GLOBALS::Settings["CWD"] = dirStr;
+                GLOBALS::Settings["CWD"] = dirPath;
             }
 
-            if (!FileExists(u8"./icons/app_icon.png")) {
+            if (!FileExists("./icons/app_icon.png")) {
                 wxMessageBox(_("Failed to locate required files. Closing application."), _("Missing Files"), wxOK | wxCENTER | wxICON_ERROR);
-                exit(EXIT_FAILURE);
+                return false;
             }
 
         } else {
             wxMessageBox(_("The required app files are available on the Wordsmith releases page:\n\n") +
                            "https://github.com/JacobBruce/Wordsmith/releases", _("Missing Files"), wxOK | wxCENTER | wxICON_INFORMATION);
-            exit(EXIT_FAILURE);
+            return false;
         }
     }
 
@@ -96,10 +122,9 @@ bool WordsmithApp::OnInit()
     for (int c=1; c < this->argc; ++c)
     {
         const std::string argStr(this->argv[c].utf8_string());
-        const std::u8string& filePath((const char8_t*)argStr.data());
 
-        if (FileExists(filePath))
-            GLOBALS::ArgFiles.emplace_back(this->argv[c], filePath);
+        if (FileExists(argStr))
+            GLOBALS::ArgFiles.emplace_back(this->argv[c], argStr);
     }
 
     //(*AppInitialize

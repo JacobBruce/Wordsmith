@@ -4,17 +4,16 @@
  * Author:    Bitfreak Software (contact@bitfreak.info)
  * Created:   2026-02-26
  * Copyright: Bitfreak Software (www.bitfreak.info)
- * License:
+ * License:   CC BY-NC-SA 4.0
  **************************************************************/
 
 #ifndef WORDSMITHMAIN_H
 #define WORDSMITHMAIN_H
 
-#define APP_VER "0.0.2"
+#define APP_VER "0.0.3"
 
 #pragma once
 #include <set>
-#include <mutex>
 #include <thread>
 #include <symspell/symspell.hpp>
 #include "crc_32.h"
@@ -60,6 +59,7 @@
 #include <wx/clrpicker.h>
 #include <wx/stc/stc.h>
 #include <wx/settings.h>
+#include <wx/app.h>
 
 class wsHtmlWindow : public wxHtmlWindow
 {
@@ -99,25 +99,33 @@ public:
     wsTextCtrl(wxWindow* parent, wxWindowID id, const wxPoint& pos,
             const wxSize& size, long style, const wxString& name);
 
-    const bool IsChanged() const;
-    const bool IsIndicated() const;
+    bool IsChanged() const;
+    bool IsFileModified() const;
+    bool IsIndicated() const;
+    bool IsPopupMenuShown() const;
+    void ShowPopupMenu(wxMenu* popup_menu, const wxPoint& pos = wxDefaultPosition);
+    void UpdateFileModState();
+    void ReloadFile();
+    void ResetFile();
     void SetChanged(bool changed=true);
     void SetIndicated(bool indicated=true);
     void SetFilePath(const wxString& file_path);
     void SetFileName(const wxString& file_name);
     const wxString& GetFilePath() const;
     const wxString& GetFileName() const;
-    const bool HasCustomFont() const;
+    bool HasCustomFont() const;
     void SetCustomFont(const wxFont& font);
     void SetFontColor(const wxColor& color);
     void SetColoredFont(const wxFont& font, const wxColor& color);
 
 private:
 
+    std::filesystem::file_time_type m_FileModTime;
     wxString m_FilePath;
     wxString m_FileName;
     bool m_IsModified;
     bool m_IsIndicated;
+    bool m_IsPopupMenuShown;
     bool m_HasCustomFont;
 };
 
@@ -171,7 +179,7 @@ public:
     void AddWord(const std::string& word);
     void RemoveWord(const std::string& word);
     void UpdateLists(bool save=true);
-    void LoadWords(std::u8string file_path);
+    void LoadWords(std::string file_path);
     void SaveWords();
     void Reset();
 
@@ -194,7 +202,7 @@ public:
     void CloseButtonClick(wxCommandEvent& event);
     void AddPhrase(const std::string& phrase);
     void UpdateList(bool save=true);
-    void LoadPhrases(std::u8string file_path);
+    void LoadPhrases(std::string file_path);
     void SavePhrases();
     void Reset();
 
@@ -282,7 +290,6 @@ namespace GLOBALS {
     inline wxChar LastKeyPress = WXK_NONE;
     inline bool GotPhraseKeys = false;
     inline std::atomic<bool> GotWordData = false;
-    inline std::thread* LoadThread = nullptr;
     inline wsTextCtrl* TabPageSTC = nullptr;
     inline phmap::parallel_flat_hash_set<std::string> UserWords;
     inline phmap::parallel_flat_hash_set<std::string> SkipWords;
@@ -291,11 +298,13 @@ namespace GLOBALS {
     inline phmap::parallel_flat_hash_map<std::string, std::vector<std::string>> WordSyn;
 	inline phmap::parallel_flat_hash_map<std::string, std::vector<std::pair<uint32_t,float>>> SimWords;
     inline phmap::parallel_flat_hash_map<std::string, std::pair<uint32_t,AfterLinks>> WordMap;
-	inline phmap::parallel_flat_hash_map<std::string, uint32_t> WebIndices;
+	inline phmap::parallel_flat_hash_map<std::string, uint32_t> WordIndices;
+    inline phmap::parallel_flat_hash_map<std::string, uint32_t> ExtraIndices;
     inline std::vector<std::pair<std::string, uint32_t>> WordVec;
-    inline std::vector<std::pair<wxString, std::u8string>> ArgFiles;
+    inline std::vector<std::pair<std::string, uint32_t>> ExtraVec;
+    inline std::vector<std::pair<wxString, std::string>> ArgFiles;
     inline std::unordered_map<std::string, std::string> Settings;
-    inline std::u8string UserDataDir;
+    inline std::string UserDataDir;
     inline std::string LineEndStr = "\n";
     inline int LineEndMode = wxSTC_EOL_LF;
     inline int AutoCompMode = 0;
@@ -335,7 +344,10 @@ class WordsmithFrame: public wxFrame
         wxTimer infoTimer;
         wxHtmlEasyPrinting easyPrint;
         HTMLFrame* docViewer;
+        std::thread wordLoadThread;
 
+        wsTextCtrl* GetTextCtrlForPage(wxWindow* page) const;
+        void ShowEditorContextMenu(wsTextCtrl& stc, const wxPoint& clientPos = wxDefaultPosition);
         void NewPadTab(int wrap=wxSTC_WRAP_WORD, int zoom=0);
         void UpdateStatusBar();
         void UpdateToolBar();
@@ -351,12 +363,13 @@ class WordsmithFrame: public wxFrame
         void FindNext(const wxString& find_str, const int& flags);
         void SetStatusBarText(const wxString& txt);
         void LoadDocument(const wxString& file_path, const wxString& file_name);
+        bool SaveDocument(wsTextCtrl* stc);
+        void CheckFileState();
         bool SelectTabPage(const wxString& file_name);
         bool LoadWebViewer(bool show_msg=true);
         bool IsNotWord(const std::string& word);
 
         //(*Handlers(WordsmithFrame)
-        void OnQuit(wxCommandEvent& event);
         void OnAboutClick(wxCommandEvent& event);
         void OnNewFileClick(wxCommandEvent& event);
         void OnFontClick(wxCommandEvent& event);
@@ -391,8 +404,9 @@ class WordsmithFrame: public wxFrame
         void OnStatsTimerTrigger(wxTimerEvent& event);
         void OnACKeyTimerTrigger(wxTimerEvent& event);
         void OnSpellCheckTrigger(wxTimerEvent& event);
-        void OnMouseUp(wxMouseEvent& event);
+        void OnMouseLeftUp(wxMouseEvent& event);
         void OnMouseRightDown(wxMouseEvent& event);
+        void OnMouseRightUp(wxMouseEvent& event);
         void OnToggleToolBar(wxCommandEvent& event);
         void OnToggleStatusBar(wxCommandEvent& event);
         void OnToggleWordWrap(wxCommandEvent& event);
@@ -417,7 +431,6 @@ class WordsmithFrame: public wxFrame
         void OnTabLoseFocus(wxFocusEvent& event);
         void OnAddMarkdownClick(wxCommandEvent& event);
         void OnDateTimeClick(wxCommandEvent& event);
-        void OnClose(wxCloseEvent& event);
         void OnToggleSpellCheck(wxCommandEvent& event);
         void OnTextStatsClick(wxCommandEvent& event);
         void OnSessionStatsClick(wxCommandEvent& event);
@@ -428,6 +441,9 @@ class WordsmithFrame: public wxFrame
         void OnRemoveWord(wxCommandEvent& event);
         void OnAddWord(wxCommandEvent& event);
         void OnAddPhrase(wxCommandEvent& event);
+        void OnActivate(wxActivateEvent& event);
+        void OnQuit(wxCommandEvent& event);
+        void OnClose(wxCloseEvent& event);
         //*)
 
         //(*Identifiers(WordsmithFrame)
