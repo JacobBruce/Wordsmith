@@ -56,6 +56,11 @@
 					<help>Save file with new name</help>
 					<handler function="OnSaveAsClick" entry="EVT_MENU" />
 				</object>
+				<object class="wxMenuItem" name="ID_MENUITEM57" variable="ReloadMenuItem" member="yes">
+					<label>Reload From Disk</label>
+					<help>Reload the current file from disk</help>
+					<handler function="OnReloadClick" entry="EVT_MENU" />
+				</object>
 				<object class="separator" />
 				<object class="wxMenuItem" name="ID_MENUITEM30" variable="PageMenuItem" member="yes">
 					<label>Page Setup</label>
@@ -260,6 +265,27 @@
 					<handler function="OnPhraseManagerClick" entry="EVT_MENU" />
 				</object>
 				<object class="separator" />
+				<object class="wxMenu" name="ID_MENUITEM58" variable="CaseMenuItem" member="yes">
+					<label>Case</label>
+					<help>Change letter case</help>
+					<object class="wxMenuItem" name="ID_MENUITEM53">
+						<label>Uppercase</label>
+						<handler function="OnCaseClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM54">
+						<label>Lowercase</label>
+						<handler function="OnCaseClick" entry="EVT_MENU" />
+					</object>
+					<object class="separator" />
+					<object class="wxMenuItem" name="ID_MENUITEM55">
+						<label>Capitalize</label>
+						<handler function="OnCaseClick" entry="EVT_MENU" />
+					</object>
+					<object class="wxMenuItem" name="ID_MENUITEM56">
+						<label>Uncapitalize</label>
+						<handler function="OnCaseClick" entry="EVT_MENU" />
+					</object>
+				</object>
 				<object class="wxMenu" name="ID_MENUITEM40" variable="HashMenuItem" member="yes">
 					<label>Hash</label>
 					<help>Calculate document hash</help>
