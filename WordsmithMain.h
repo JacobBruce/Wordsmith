@@ -10,7 +10,7 @@
 #ifndef WORDSMITHMAIN_H
 #define WORDSMITHMAIN_H
 
-#define APP_VER "0.0.4"
+#define APP_VER "0.0.5"
 
 #pragma once
 #include <set>

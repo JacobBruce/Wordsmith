@@ -1079,6 +1079,8 @@ void wsAboutDialog::OnStateChange(wxWebRequestEvent& event)
 		case wxWebRequest::State_Completed:
 		{
 			wxString appVer(event.GetResponse().AsString());
+			appVer = appVer.BeforeFirst('\n');
+			appVer.Trim(true).Trim(false);
 
 			checkBtn->SetLabel(_("Check for Update"));
 
