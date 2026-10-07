@@ -10,7 +10,7 @@
 #ifndef WORDSMITHMAIN_H
 #define WORDSMITHMAIN_H
 
-#define APP_VER "0.0.5"
+#define APP_VER "0.1.0"
 
 #pragma once
 #include <set>
@@ -60,6 +60,8 @@
 #include <wx/stc/stc.h>
 #include <wx/settings.h>
 #include <wx/app.h>
+#include <wx/filehistory.h>
+#include <wx/dnd.h>
 
 class wsHtmlWindow : public wxHtmlWindow
 {
@@ -118,6 +120,8 @@ public:
 	void SetCustomFont(const wxFont& font);
 	void SetFontColor(const wxColor& color);
 	void SetColoredFont(const wxFont& font, const wxColor& color);
+	void GetWordRange(int pos, int& start, int& end);
+	wxString GetWordAt(int pos);
 
 private:
 
@@ -287,7 +291,7 @@ private:
 
 namespace GLOBALS {
 
-	inline wxString WordChars = wxString::FromUTF8(WordParser::U32ToU8(U"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'-àáâãäåæçèéêëìíîïðñòóôõöøùúûüýÿþÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß"));
+	inline wxString WordChars = wxString::FromUTF8(WordParser::U32ToU8(U"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'’-àáâãäåæçèéêëìíîïðñòóôõöøùúûüýÿþÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß"));
 	inline wxString LastPhrase = wxEmptyString;
 	inline wxChar LastKeyPress = WXK_NONE;
 	inline bool GotPhraseKeys = false;
@@ -325,6 +329,7 @@ class WordsmithFrame: public wxFrame
 		WordsmithFrame(wxWindow* parent,wxWindowID id = -1);
 		virtual ~WordsmithFrame();
 		void OpenFilePath(const wxString& file_path);
+		void OpenDroppedFiles(const wxArrayString& files);
 
 	private:
 
@@ -350,6 +355,7 @@ class WordsmithFrame: public wxFrame
 		wxTimer spellTimer;
 		wxTimer infoTimer;
 		wxHtmlEasyPrinting easyPrint;
+		wxFileHistory fileHistory;
 		HTMLFrame* docViewer;
 		std::thread wordLoadThread;
 
@@ -373,6 +379,11 @@ class WordsmithFrame: public wxFrame
 		void SetStatusBarText(const wxString& txt);
 		void LoadDocument(const wxString& file_path, const wxString& file_name);
 		bool SaveDocument(wsTextCtrl* stc);
+		void AddToRecentFiles(const wxString& file_path);
+		void LoadRecentFiles();
+		void SaveRecentFiles();
+		void EnableFileDrop(wxWindow* win);
+		void RevealInFileExplorer(const wxString& file_path);
 		void CheckFileState();
 		void UpdateTabToolTip(size_t pageIdx);
 		bool SelectTabPage(const wxString& file_name);
@@ -412,6 +423,8 @@ class WordsmithFrame: public wxFrame
 		void OnMouseHoverEnd(wxStyledTextEvent& event);
 		void OnTabPageChanged(wxAuiNotebookEvent& event);
 		void OnTabPageClosed(wxAuiNotebookEvent& event);
+		void OnTabRightUp(wxAuiNotebookEvent& event);
+		void OnRecentFileClick(wxCommandEvent& event);
 		void OnKeyPress(wxKeyEvent& event);
 		void OnKeyUp(wxKeyEvent& event);
 		void OnInitTimerTrigger(wxTimerEvent& event);
@@ -558,6 +571,7 @@ class WordsmithFrame: public wxFrame
 		wxMenu* ToolsMenu;
 		wxMenu* ViewMenu;
 		wxMenu* ZoomMenuItem;
+		wxMenu* RecentMenu;
 		wxMenuItem* CopyMenuItem;
 		wxMenuItem* CryptoMenuItem;
 		wxMenuItem* CutMenuItem;

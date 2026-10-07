@@ -125,12 +125,11 @@ blockquote p {
 	padding: 4px 4px 4px 0px;
 }
 
-p code {
+p code, li code {
 	color: #000000;
 	background-color: #d0d0d0;
 	border-radius: 4px;
 	padding: 1px 4px;
-	vertical-align: top;
 }
 
 .task-list-item {

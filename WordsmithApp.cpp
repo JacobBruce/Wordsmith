@@ -57,22 +57,28 @@ public:
 	}
 };
 
+inline bool IsUtf8Locale(const char* name)
+{
+	if (!name) return false;
+	const std::string lowName(StrToLower(std::string(name)));
+	return lowName.find("utf-8") != std::string::npos || lowName.find("utf8") != std::string::npos;
+}
+
 inline bool EnsureUtf8Ctype()
 {
-	const char* cur = std::setlocale(LC_CTYPE, nullptr);
-
-	if (cur && (std::strstr(cur, "UTF-8") || std::strstr(cur, "utf8")))
+	if (IsUtf8Locale(std::setlocale(LC_CTYPE, nullptr)))
 		return true;
 
-	return std::setlocale(LC_CTYPE, "en_US.UTF-8") != nullptr
-		|| std::setlocale(LC_CTYPE, "C.UTF-8") != nullptr
-		|| std::setlocale(LC_CTYPE, ".UTF-8") != nullptr;
+	for (const char* name : { "", "C.UTF-8", "en_US.UTF-8", ".UTF-8" })
+		if (IsUtf8Locale(std::setlocale(LC_CTYPE, name))) return true;
+
+	return false;
 }
 
 bool WordsmithApp::OnInit()
 {
 	if (!EnsureUtf8Ctype()) {
-		wxMessageBox(_("Invalid C locale detected. Closing application."), _("Invalid Locale"), wxOK | wxCENTER | wxICON_ERROR);
+		wxMessageBox(_("No UTF-8 locale available. Closing application."), _("Invalid Locale"), wxOK | wxCENTER | wxICON_ERROR);
 		return false;
 	}
 

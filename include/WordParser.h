@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <locale>
 #include <cstring>
+#include <limits>
 #include <cstdint>
 #include <cuchar>
 #include <cerrno>
@@ -167,6 +168,11 @@ namespace WordParser {
 	inline bool IsJoin(const uint32_t& c)
 	{
 		return c == 39 || c == 45 || c == 0x2019;
+	}
+
+	inline void StraightenApostrophes(wxString& word)
+	{
+		word.Replace(wxS("’"), wxS("'"));
 	}
 
 	inline bool IsEnd(const uint32_t& c)
@@ -432,6 +438,131 @@ namespace WordParser {
 		inFile.close();
 
 		return true;
+	}
+
+	// Reads a whole binary file into memory and parses little-endian values from it (floats are IEEE 754).
+	// Reading past the end sets failed and returns zero values instead of exiting, so loaders can return false.
+	struct BinReader {
+		std::string data;
+		size_t pos = 0;
+		bool failed = false;
+
+		bool Open(const std::string& file_path)
+		{
+			std::ifstream inFile(file_path, std::ios::binary | std::ios::ate);
+			if (!inFile.is_open()) return false;
+
+			const std::streamoff size = inFile.tellg();
+			if (size < 0) return false;
+
+			data.resize((size_t)size);
+			inFile.seekg(0);
+			return (bool)inFile.read(data.data(), data.size());
+		}
+
+		bool AtEnd() const { return pos >= data.size(); }
+
+		const char* Take(const size_t bytes)
+		{
+			if (failed || data.size() - pos < bytes) {
+				failed = true;
+				return nullptr;
+			}
+
+			const char* ptr = data.data() + pos;
+			pos += bytes;
+			return ptr;
+		}
+
+		uint8_t U8()
+		{
+			const char* ptr = Take(1);
+			return ptr ? (uint8_t)*ptr : 0;
+		}
+
+		uint32_t U32()
+		{
+			const uint8_t* b = (const uint8_t*)Take(4);
+			if (!b) return 0;
+			return b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+		}
+
+		float F32()
+		{
+			static_assert(std::numeric_limits<float>::is_iec559 && sizeof(float) == 4, "Binary word files require IEEE 754 floats");
+			const uint32_t bits = U32();
+			float value;
+			std::memcpy(&value, &bits, sizeof(value));
+			return value;
+		}
+
+		std::string Str8()
+		{
+			const uint8_t size = U8();
+			const char* ptr = Take(size);
+			return ptr ? std::string(ptr, size) : std::string();
+		}
+	};
+
+	// Loads a binary half word web (after links only) saved by WordParser's SaveWordWebHalfBin:
+	//   u32 word count, then for each word:
+	//   u8 word size, word bytes (UTF-8), u32 word count, u8 after size, after links (u32 word index, u32 count) ...
+	inline bool LoadWordWebBin(phmap::parallel_flat_hash_map<std::string, std::pair<uint32_t,AfterLinks>>& word_map,
+							   std::vector<std::pair<std::string, uint32_t>>& word_vec, std::string word_file)
+	{
+		BinReader reader;
+		if (!reader.Open(word_file)) return false;
+
+		const uint32_t wordCount = reader.U32();
+		word_vec.reserve(word_vec.size() + wordCount);
+		word_map.reserve(word_map.size() + wordCount);
+
+		for (uint32_t i=0; i < wordCount && !reader.failed; ++i)
+		{
+			std::string word(reader.Str8());
+			const uint32_t count = reader.U32();
+			const uint8_t linkCount = reader.U8();
+
+			std::pair<uint32_t,AfterLinks> links;
+			links.first = i;
+			links.second.reserve(linkCount);
+
+			for (uint8_t j=0; j < linkCount; ++j) {
+				const uint32_t index = reader.U32();
+				links.second.emplace_back(index, reader.U32());
+			}
+
+			word_map[word] = std::move(links);
+			word_vec.emplace_back(std::move(word), count);
+		}
+
+		return !reader.failed && reader.AtEnd();
+	}
+
+	// Loads binary sim words saved by WordParser's SaveSimWordsBin, for each word:
+	//   u8 word size, word bytes, u8 list size, list of (u32 word index, f32 score) sorted by score (highest first)
+	inline bool LoadSimWordsBin(phmap::parallel_flat_hash_map<std::string, std::vector<std::pair<uint32_t,float>>>& simWords, std::string word_file)
+	{
+		BinReader reader;
+		if (!reader.Open(word_file)) return false;
+
+		while (!reader.AtEnd() && !reader.failed)
+		{
+			std::string word(reader.Str8());
+			const uint8_t simCount = reader.U8();
+
+			if (simWords.contains(word)) return false;
+
+			std::vector<std::pair<uint32_t,float>>& wordVec(simWords[word]);
+			wordVec.reserve(simCount);
+
+			for (uint8_t i=0; i < simCount; ++i) {
+				const uint32_t index = reader.U32();
+				wordVec.emplace_back(index, reader.F32());
+			}
+		}
+
+		return !reader.failed;
 	}
 
 	inline void GenIndexMap(std::vector<std::pair<std::string, uint32_t>> words, phmap::parallel_flat_hash_map<std::string, uint32_t>& index_map)
