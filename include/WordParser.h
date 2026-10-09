@@ -206,6 +206,11 @@ namespace WordParser {
 		return c > 223 && c < 255;
 	}
 
+	inline bool IsLow2(const uint32_t& c)
+	{
+		return IsLow(c) || IsLowE(c);
+	}
+
 	inline uint32_t UpperChar(const uint32_t& c)
 	{
 		if (IsLow(c)) {
@@ -230,8 +235,18 @@ namespace WordParser {
 
 	inline void UpperWord(wxString& word)
 	{
-		if (word.length() > 1)
-			word[0] = UpperChar(word[0]);
+		if (word.length() > 1 && IsLow2(word[0])) {
+
+			wxString upperStr(word);
+			upperStr[0] = UpperChar(word[0]);
+
+			for (size_t i=1; i < word.size(); ++i) {
+				upperStr[i] = UpperChar(word[i]);
+				if (word[i] != upperStr[i]) return;
+			}
+
+			word = upperStr;
+		}
 	}
 
 	inline void LowerWord(wxString& word)
@@ -339,26 +354,6 @@ namespace WordParser {
 			return std::make_pair(0,0.f);
 		}
 	}
-
-	/*inline bool LoadWordList(phmap::parallel_flat_hash_set<std::string>& words, std::string word_file, bool lower=false)
-	{
-		std::ifstream inFile(word_file);
-		std::string line;
-
-		if (!inFile.is_open()) return false;
-
-		if (lower) {
-			while (std::getline(inFile, line)) {
-				LowerWord(line);
-				words.emplace(line);
-			}
-		} else {
-			while (std::getline(inFile, line))
-				words.emplace(line);
-		}
-
-		return true;
-	}*/
 
 	inline bool LoadWordWeb(phmap::parallel_flat_hash_map<std::string, std::pair<uint32_t,AfterLinks>>& word_map,
 							std::vector<std::pair<std::string, uint32_t>>& word_vec, std::string word_file)

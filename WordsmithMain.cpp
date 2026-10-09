@@ -3925,14 +3925,6 @@ void WordsmithFrame::ShowEditorContextMenu(wsTextCtrl& stc, const wxPoint& clien
 {
 	GLOBALS::TabPageSTC = &stc;
 
-	static phmap::flat_hash_set<std::string> comWords = {
-		"which", "whose", "while", "where", "those", "should", "would", "could", "else", "like", "some", "been", "will", "your", "there", "their", "them", "they",
-		"said", "very", "with", "what", "when", "have", "were", "went", "well", "much", "this", "that", "then", "than", "and", "the", "but", "can", "not", "one", "out",
-		"from", "also", "just", "into", "has", "for", "any", "get", "who", "you", "had", "our", "why", "how", "own", "too", "its", "did", "are", "was", "his", "him",
-		"her", "she", "he", "am", "on", "to", "be", "do", "it", "is", "at", "in", "or", "so", "my", "of", "we", "as", "by", "if", "me", "an", "us", "up", "no",
-		"shouldn't", "wouldn't", "couldn't", "wasn't", "didn't", "you're", "don't", "can't", "that's", "it's", "he'd", "she'd", "i'll", "i'm", "i'd"
-	};
-
 	std::string selWord, lowWord, synWord, simWord;
 	wxString selText;
 	wxMenu menu;
@@ -4072,7 +4064,7 @@ void WordsmithFrame::ShowEditorContextMenu(wsTextCtrl& stc, const wxPoint& clien
 				word = WordParser::LowerWordU8(wxString::FromUTF8(word));
 
 				if (word.length() > 1 && word != lowWord && !syns.contains(word))
-					if (!comWords.contains(word) && !GLOBALS::SkipWords.contains(word)) simWords.emplace(word);
+					if (!GLOBALS::SkipWords.contains(word)) simWords.emplace(word);
 			}
 		}
 
@@ -4086,7 +4078,7 @@ void WordsmithFrame::ShowEditorContextMenu(wsTextCtrl& stc, const wxPoint& clien
 				word = WordParser::LowerWordU8(wxString::FromUTF8(word));
 
 				if (word.length() > 1 && word != lowWord && !simWords.contains(word) && !syns.contains(word))
-					if (!comWords.contains(word) && !GLOBALS::SkipWords.contains(word)) lowWords.emplace(word);
+					if (!GLOBALS::SkipWords.contains(word)) lowWords.emplace(word);
 			}
 		}
 
